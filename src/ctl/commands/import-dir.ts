@@ -4,12 +4,13 @@ import { getDatasource } from '@/lib/datasource';
 import { prisma } from '@/lib/db';
 import { guess } from '@/lib/mimes';
 import { statSync } from 'fs';
-import { mkdir, readdir } from 'fs/promises';
+import { mkdir, readdir, rm } from 'fs/promises';
 import { join, parse, resolve } from 'path';
 
 export type ImportDirResult = {
   inserted: number;
   imported: number;
+  deleted: number;
   totalSize: number;
   skipped: number;
   files: string[];
@@ -22,10 +23,12 @@ export async function runImportDir(
     id,
     folder,
     skipDb,
+    deleteSource,
   }: {
     id?: string;
     folder?: string;
     skipDb?: boolean;
+    deleteSource?: boolean;
   },
 ): Promise<ImportDirResult> {
   const fullPath = resolve(directory);
@@ -102,6 +105,7 @@ export async function runImportDir(
 
   const totalSize = data.reduce((acc, file) => acc + file.size, 0);
   let imported = 0;
+  let deleted = 0;
 
   if (config.datasource.type === 'local')
     await mkdir(config.datasource.local!.directory, { recursive: true });
@@ -118,6 +122,15 @@ export async function runImportDir(
         noDelete: true,
       });
       ++imported;
+
+      if (deleteSource) {
+        try {
+          await rm(files[i], { force: true });
+          ++deleted;
+        } catch (err: any) {
+          errors.push(`Imported ${data[i].name} but failed to delete source: ${err.message}`);
+        }
+      }
     } catch (err: any) {
       errors.push(`Failed to upload ${data[i].name}: ${err.message}`);
     }
@@ -126,6 +139,7 @@ export async function runImportDir(
   return {
     inserted,
     imported,
+    deleted,
     totalSize,
     skipped: dirFiles.length - data.length,
     files: data.map((d) => d.name),

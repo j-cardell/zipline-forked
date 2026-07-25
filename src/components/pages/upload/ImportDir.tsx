@@ -14,6 +14,7 @@ export default function UploadImportDir() {
     directory: string;
     inserted: number;
     imported: number;
+    deleted: number;
     skipped: number;
     totalSize: number;
     files: string[];
@@ -119,6 +120,12 @@ export default function UploadImportDir() {
                   Imported
                 </Text>
                 <Text>{result.imported}</Text>
+              </Box>
+              <Box>
+                <Text size='xs' c='dimmed'>
+                  Deleted
+                </Text>
+                <Text>{result.deleted}</Text>
               </Box>
               <Box>
                 <Text size='xs' c='dimmed'>

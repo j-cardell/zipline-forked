@@ -8,6 +8,7 @@ export type ApiUserImportDirResponse = {
   directory: string;
   inserted: number;
   imported: number;
+  deleted: number;
   totalSize: number;
   skipped: number;
   files: string[];
@@ -31,6 +32,7 @@ export default typedPlugin(
               directory: z.string(),
               inserted: z.number(),
               imported: z.number(),
+              deleted: z.number(),
               totalSize: z.number(),
               skipped: z.number(),
               files: z.array(z.string()),
@@ -48,6 +50,7 @@ export default typedPlugin(
         const result = await runImportDir(directory, {
           id: req.user.id,
           folder: req.body.folder,
+          deleteSource: true,
         });
 
         return res.send({
