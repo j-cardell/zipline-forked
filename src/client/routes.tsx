@@ -67,6 +67,7 @@ export const router = createBrowserRouter([
                   { path: 'urls', lazy: () => import('./pages/dashboard/urls') },
                   { path: 'upload/file', lazy: () => import('./pages/dashboard/upload/file') },
                   { path: 'upload/text', lazy: () => import('./pages/dashboard/upload/text') },
+                  { path: 'upload/import-dir', lazy: () => import('./pages/dashboard/upload/import-dir') },
 
                   // admin routes
                   {
