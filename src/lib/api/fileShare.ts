@@ -1,3 +1,4 @@
+import { ApiUserSharesResponse } from '@/server/routes/api/user/shares';
 import { File } from '@/lib/db/models/file';
 
 export type Share = {
@@ -33,5 +34,17 @@ export async function listFileShares(file: File): Promise<{ shares: Share[] }> {
 
 export async function revokeFileShare(file: File, shareId: string): Promise<void> {
   const res = await fetch(`/api/user/files/${file.id}/share/${shareId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`failed to revoke share: ${res.status}`);
+}
+
+export async function listUserShares(): Promise<ApiUserSharesResponse['shares']> {
+  const res = await fetch('/api/user/shares');
+  if (!res.ok) throw new Error(`failed to list shares: ${res.status}`);
+  const data: ApiUserSharesResponse = await res.json();
+  return data.shares;
+}
+
+export async function revokeUserShare(shareId: string): Promise<void> {
+  const res = await fetch(`/api/user/shares/${shareId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`failed to revoke share: ${res.status}`);
 }

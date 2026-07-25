@@ -38,6 +38,7 @@ import { ApiUserSessionsResponse } from '@/server/routes/api/user/sessions';
 import { ApiUserActivityResponse } from '@/server/routes/api/user/activity';
 import { ApiUserStatsResponse } from '@/server/routes/api/user/stats';
 import { ApiUserTagsResponse } from '@/server/routes/api/user/tags';
+import { ApiUserSharesResponse } from '@/server/routes/api/user/shares';
 import { ApiUserTagsIdResponse } from '@/server/routes/api/user/tags/[id]';
 import { ApiUserTokenResponse } from '@/server/routes/api/user/token';
 import { ApiUserUrlsResponse } from '@/server/routes/api/user/urls';
@@ -67,6 +68,7 @@ export type Response = {
   '/api/user/files': ApiUserFilesResponse;
   '/api/user/urls/[id]': ApiUserUrlsIdResponse;
   '/api/user/urls': ApiUserUrlsResponse;
+  '/api/user/shares': ApiUserSharesResponse;
   '/api/user/tags/[id]': ApiUserTagsIdResponse;
   '/api/user/tags': ApiUserTagsResponse;
   '/api/user/sessions': ApiUserSessionsResponse;

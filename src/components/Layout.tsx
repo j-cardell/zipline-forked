@@ -45,6 +45,7 @@ import {
   IconTags,
   IconUpload,
   IconUsersGroup,
+  IconShare,
 } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, NavigateFunction, Outlet, useLoaderData, useLocation, useNavigate } from 'react-router-dom';
@@ -83,6 +84,12 @@ const navLinks: NavLinks[] = [
     icon: <IconFiles size='1rem' />,
     active: (path: string) => path === '/dashboard/files',
     href: '/dashboard/files',
+  },
+  {
+    label: 'Shares',
+    icon: <IconShare size='1rem' />,
+    active: (path: string) => path === '/dashboard/shares',
+    href: '/dashboard/shares',
   },
   {
     label: 'Folders',
