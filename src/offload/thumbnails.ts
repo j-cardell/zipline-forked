@@ -47,10 +47,6 @@ function name(fileId: string) {
   return `.thumbnail.${fileId}.${config.features.thumbnails.format}`;
 }
 
-function thumbPath(fileId: string) {
-  return join('.thumbnails', name(fileId));
-}
-
 function genThumbnail(input: string, output: string): Promise<Buffer | undefined> {
   return new Promise((resolve, reject) => {
     ffmpeg(input)
@@ -138,11 +134,11 @@ async function generate(config: Config, datasource: Datasource, ids: string[]) {
     const thumbnail = await genThumbnail(tmpFile, thumbnailTmpFile);
     if (!thumbnail || thumbnail.length === 0) continue;
 
-    const existing = await datasource.size(thumbPath(file.id));
+    const existing = await datasource.size(name(file.id));
     if (existing || existing === 0) {
-      await datasource.delete(thumbPath(file.id));
+      await datasource.delete(name(file.id));
     }
-    await datasource.put(thumbPath(file.id), thumbnail, {
+    await datasource.put(name(file.id), thumbnail, {
       mimetype: formatMimes[config.features.thumbnails.format] || 'image/jpeg',
     });
 
@@ -157,7 +153,7 @@ async function generate(config: Config, datasource: Datasource, ids: string[]) {
       t = await dbProxy<ThumbnailId>('thumbnail.create', {
         data: {
           fileId: file.id,
-          path: thumbPath(file.id),
+          path: name(file.id),
         },
       });
     } else {

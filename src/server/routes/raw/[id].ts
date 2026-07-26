@@ -13,7 +13,6 @@ import { TimedCache } from '@/lib/timedCache';
 import typedPlugin from '@/server/typedPlugin';
 import { verifyFileAccess } from '@/server/middleware/fileAccess';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { join } from 'path';
 
 const VIEW_WINDOW = 5 * 1000;
 const viewsCache = new TimedCache<string, number>(VIEW_WINDOW);
@@ -46,10 +45,10 @@ export const rawFileHandler = async (
   const idSanitized = sanitizeFilename(id);
   if (!idSanitized) return res.callNotFound();
 
-  if (id.startsWith('.thumbnail') || id.startsWith('.thumbnails/')) {
+  if (id.startsWith('.thumbnail')) {
     const thumbnail = await prisma.thumbnail.findFirst({
       where: {
-        OR: [{ path: idSanitized }, { path: join('.thumbnails', idSanitized) }],
+        path: idSanitized,
         file: {
           password: null,
         },
@@ -65,11 +64,7 @@ export const rawFileHandler = async (
     if (!buf) return res.callNotFound();
 
     return res
-      .type(
-        await guess(
-          thumbnail.path.replace('.thumbnails/', '').replace('.thumbnail-', '').split('.').pop() || 'jpg',
-        ),
-      )
+      .type(await guess(thumbnail.path.replace('.thumbnail-', '').split('.').pop() || 'jpg'))
       .headers({
         'Content-Length': size,
       })

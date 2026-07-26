@@ -28,6 +28,10 @@ function isCrossDeviceMove(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EXDEV';
 }
 
+function isThumbnail(file: string): boolean {
+  return file.startsWith('.thumbnail.');
+}
+
 export class LocalDatasource extends Datasource {
   name = 'local';
   logger = log('datasource').c('local');
@@ -39,7 +43,9 @@ export class LocalDatasource extends Datasource {
   }
 
   private resolvePath(file: string): string | void {
-    const resolved = resolve(this.dir, file);
+    // Thumbnails are stored in a .thumbnails subfolder, but addressed by their flat name everywhere else.
+    const effectiveFile = isThumbnail(file) ? join('.thumbnails', file) : file;
+    const resolved = resolve(this.dir, effectiveFile);
     const uploadsDir = resolve(this.dir);
     const thumbsDir = resolve(this.thumbnailsDir);
 
@@ -151,22 +157,7 @@ export class LocalDatasource extends Datasource {
 
   public async list(options: ListOptions = { prefix: '' }): Promise<string[]> {
     const files = await readdir(this.dir, { withFileTypes: true });
-    const thumbsDir = join(this.dir, '.thumbnails');
-    let thumbs: string[] = [];
-    if (existsSync(thumbsDir)) {
-      const thumbFiles = await readdir(thumbsDir, { withFileTypes: true });
-      thumbs = thumbFiles
-        .filter((f) => f.isFile() && f.name.startsWith(options.prefix || ''))
-        .map((f) => join('.thumbnails', f.name));
-    }
 
-    return [
-      ...files.filter((f) => f.isFile() && f.name.startsWith(options.prefix || '')).map((f) => f.name),
-      ...thumbs,
-    ];
-  }
-
-  public thumbnailPath(fileId: string, format: string): string {
-    return join(this.thumbnailsDir, `.thumbnail.${fileId}.${format}`);
+    return files.filter((f) => f.isFile() && f.name.startsWith(options.prefix || '')).map((f) => f.name);
   }
 }

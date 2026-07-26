@@ -12,29 +12,27 @@ export async function migrateThumbnailsToSubfolder() {
 
   const local = datasource as LocalDatasource;
   const uploadsDir = local.dir;
-  const thumbsDir = join(uploadsDir, '.thumbnails');
+  const thumbsDir = local.thumbnailsDir;
 
   await mkdir(thumbsDir, { recursive: true });
 
   const entries = await readdir(uploadsDir, { withFileTypes: true });
   const flatThumbs = entries.filter((e) => e.isFile() && e.name.startsWith('.thumbnail.'));
 
-  if (flatThumbs.length === 0) return;
+  if (flatThumbs.length === 0) {
+    logger.debug('no flat thumbnails to migrate');
+    return;
+  }
 
   logger.info(`found ${flatThumbs.length} flat thumbnail(s) to migrate`);
-
-  const dbThumbnails = await prisma.thumbnail.findMany({
-    select: { id: true, path: true },
-  });
-  const dbPaths = new Map(dbThumbnails.map((t) => [t.path, t.id]));
 
   for (const entry of flatThumbs) {
     const oldPath = join(uploadsDir, entry.name);
     const newPath = join(thumbsDir, entry.name);
-    const newDbPath = join('.thumbnails', entry.name);
 
     try {
       await rename(oldPath, newPath);
+      logger.debug('moved thumbnail to .thumbnails folder', { file: entry.name });
     } catch (err: any) {
       if (err.code === 'EEXIST') {
         logger.warn('thumbnail already exists in subfolder, removing old', { file: entry.name });
@@ -45,17 +43,23 @@ export async function migrateThumbnailsToSubfolder() {
         }
       } else {
         logger.error('failed to move thumbnail', { file: entry.name, error: err.message });
-        continue;
       }
     }
+  }
 
-    const dbId = dbPaths.get(entry.name);
-    if (dbId) {
-      await prisma.thumbnail.update({
-        where: { id: dbId },
-        data: { path: newDbPath },
-      });
-    }
+  // DB paths remain flat (.thumbnail.<id>.<format>); LocalDatasource resolves them to .thumbnails/.
+  const dbThumbnails = await prisma.thumbnail.findMany({
+    select: { id: true, path: true },
+  });
+  const normalizedPaths = dbThumbnails.filter((t) => t.path.startsWith('.thumbnails/'));
+
+  for (const thumb of normalizedPaths) {
+    const flatPath = thumb.path.replace('.thumbnails/', '');
+    await prisma.thumbnail.update({
+      where: { id: thumb.id },
+      data: { path: flatPath },
+    });
+    logger.debug('normalized thumbnail path', { id: thumb.id, from: thumb.path, to: flatPath });
   }
 
   logger.info('thumbnail migration complete');
