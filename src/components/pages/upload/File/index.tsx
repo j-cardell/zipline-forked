@@ -21,7 +21,7 @@ import {
 } from '@mantine/core';
 import { Dropzone } from '@mantine/dropzone';
 import { useClipboard, useColorScheme } from '@mantine/hooks';
-import { notifications, showNotification } from '@mantine/notifications';
+import { notifications } from '@mantine/notifications';
 import { IconDeviceSdCard, IconFiles, IconTrashFilled, IconUpload, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -79,23 +79,18 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
 
   const aggSize = useCallback(() => files.reduce((acc, file) => acc + file.size, 0), [files]);
 
-  const handlePaste = useCallback((e: ClipboardEvent) => {
-    if (!e.clipboardData) return;
-    const pastedFiles: File[] = [];
-    for (const item of Array.from(e.clipboardData.items)) {
-      const file = item.getAsFile();
-      if (file) pastedFiles.push(file);
+  const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    if (files.length > 0) {
+      e.preventDefault();
     }
-    if (pastedFiles.length === 0) return;
-    e.preventDefault();
+  };
 
-    setFiles((prev) => [...pastedFiles, ...prev]);
-    setVisibleCount(initialVisible);
-    showNotification({
-      message: `${pastedFiles.length} file${pastedFiles.length !== 1 ? 's' : ''} pasted from clipboard`,
-      color: 'blue',
-    });
-  }, []);
+  useEffect(() => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [files.length]);
 
   const upload = async () => {
     const maxBytes = config.chunks.enabled && bytes(config.chunks.max);
@@ -118,53 +113,32 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
           ),
         });
       }
-      if (normalUploads.length > 0) {
-        await uploadFiles(normalUploads, {
-          setFiles,
-          setLoading,
-          setProgress,
-          clipboard,
-          clearEphemeral,
-          options,
-          ephemeral,
-          folder: targetFolder,
-        });
-      }
+      await uploadFiles(normalUploads, {
+        setFiles,
+        setLoading,
+        setProgress,
+        clipboard,
+        clearEphemeral,
+        options,
+        ephemeral,
+        folder: targetFolder,
+      });
+    }
 
-      if (partialUploads.length > 0) {
-        await uploadPartialFiles(partialUploads, {
-          setFiles,
-          setLoading,
-          setProgress,
-          clipboard,
-          clearEphemeral,
-          options,
-          ephemeral,
-          config,
-          folder: targetFolder,
-        });
-      }
+    if (partialUploads.length > 0) {
+      await uploadPartialFiles(partialUploads, {
+        setFiles,
+        setLoading,
+        setProgress,
+        clipboard,
+        clearEphemeral,
+        options,
+        ephemeral,
+        config,
+        folder: targetFolder,
+      });
     }
   };
-  useEffect(() => {
-    document.addEventListener('paste', handlePaste);
-    return () => {
-      document.removeEventListener('paste', handlePaste);
-    };
-  }, [handlePaste]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (files.length > 0) {
-        e.preventDefault();
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [files.length]);
 
   if (!config) return null;
 
