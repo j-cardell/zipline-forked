@@ -488,7 +488,14 @@ export default function FileViewer({
           willChange: 'opacity',
         }}
       >
-        <Paper m={0} p={0} withBorder bdrs={0} style={{ borderTop: 0, borderLeft: 0, borderRight: 0 }}>
+        <Paper
+          m={0}
+          p={0}
+          withBorder
+          bdrs={0}
+          onClick={(e) => e.stopPropagation()}
+          style={{ borderTop: 0, borderLeft: 0, borderRight: 0 }}
+        >
           <Stack gap='sm' px='lg' py='sm' onClick={(e) => e.stopPropagation()}>
             <Group justify='space-between' align='center' gap='sm' wrap='nowrap' visibleFrom='sm'>
               <Box style={{ minWidth: 0, flex: 1 }}>
@@ -553,7 +560,6 @@ export default function FileViewer({
         >
           {open && file ? (
             <Box
-              onClick={(e) => e.stopPropagation()}
               style={{
                 display: 'flex',
                 flexDirection: 'column',

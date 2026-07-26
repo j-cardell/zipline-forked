@@ -39,6 +39,7 @@ export function Placeholder({ text, Icon, ...props }: { text: string; Icon: Icon
 function FullscreenSizedMedia({ children }: { children: React.ReactNode }) {
   return (
     <Box
+      onClick={(e) => e.stopPropagation()}
       style={{
         flex: 1,
         alignSelf: 'stretch',
