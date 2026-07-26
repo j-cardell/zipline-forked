@@ -55,14 +55,20 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
 
   const handlePaste = useCallback((e: ClipboardEvent) => {
     if (!e.clipboardData) return;
-    for (let i = 0; i !== e.clipboardData.items.length; ++i) {
-      if (!e.clipboardData.items[i].type.startsWith('image')) return;
-      const blob = e.clipboardData.items[i].getAsFile();
-      if (!blob) return;
-      setFiles((prev) => [...prev, blob]);
-      setVisibleCount(initialVisible);
-      showNotification({ message: `Image ${blob.name} pasted from clipboard`, color: 'blue' });
+    const pastedFiles: File[] = [];
+    for (const item of Array.from(e.clipboardData.items)) {
+      const file = item.getAsFile();
+      if (file) pastedFiles.push(file);
     }
+    if (pastedFiles.length === 0) return;
+    e.preventDefault();
+
+    setFiles((prev) => [...pastedFiles, ...prev]);
+    setVisibleCount(initialVisible);
+    showNotification({
+      message: `${pastedFiles.length} file${pastedFiles.length !== 1 ? 's' : ''} pasted from clipboard`,
+      color: 'blue',
+    });
   }, []);
 
   const upload = async () => {

@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
+import { showNotification } from '@mantine/notifications';
 import UploadOptionsButton from '../UploadOptionsButton';
 import styles from './index.module.css';
 
@@ -47,6 +48,34 @@ export default function UploadText() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [files]);
+
+  const handlePaste = useCallback(
+    (e: ClipboardEvent) => {
+      if (!e.clipboardData) return;
+
+      const text = e.clipboardData.getData('text');
+      if (!text) return;
+      e.preventDefault();
+
+      const current = files[selected];
+      if (!current || !current.text.trim()) {
+        setFile(selected, 'text', text);
+        showNotification({ message: 'Pasted clipboard text into snippet', color: 'blue' });
+      } else {
+        addFile(selected);
+        setFile(selected + 1, 'text', text);
+        showNotification({ message: 'Pasted clipboard text into new snippet', color: 'blue' });
+      }
+    },
+    [addFile, files, selected, setFile],
+  );
+
+  useEffect(() => {
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, [handlePaste]);
 
   const handleTab = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
