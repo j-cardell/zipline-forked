@@ -157,7 +157,18 @@ export class LocalDatasource extends Datasource {
 
   public async list(options: ListOptions = { prefix: '' }): Promise<string[]> {
     const files = await readdir(this.dir, { withFileTypes: true });
+    const thumbsDir = join(this.dir, '.thumbnails');
+    let thumbs: string[] = [];
+    if (existsSync(thumbsDir)) {
+      const thumbFiles = await readdir(thumbsDir, { withFileTypes: true });
+      thumbs = thumbFiles
+        .filter((f) => f.isFile() && f.name.startsWith(options.prefix || ''))
+        .map((f) => f.name);
+    }
 
-    return files.filter((f) => f.isFile() && f.name.startsWith(options.prefix || '')).map((f) => f.name);
+    return [
+      ...files.filter((f) => f.isFile() && f.name.startsWith(options.prefix || '')).map((f) => f.name),
+      ...thumbs,
+    ];
   }
 }

@@ -11,8 +11,9 @@ export default function cleanThumbnails(prisma: typeof globalThis.__db__) {
       },
     });
 
+    // DB paths are flat; LocalDatasource.list returns flat names from both root and .thumbnails/
     const paths = new Set(dbThumbnails.map((t) => t.path));
-    const fsOrphaned = fsThumbnails.filter((path) => !paths.has(path));
+    const fsOrphaned = fsThumbnails.filter((path) => !paths.has(path) && !paths.has(`.thumbnails/${path}`));
 
     for (const path of fsOrphaned) {
       try {
@@ -24,7 +25,9 @@ export default function cleanThumbnails(prisma: typeof globalThis.__db__) {
     }
 
     const fs = new Set(fsThumbnails);
-    const dbOrphaned = dbThumbnails.filter((t) => !fs.has(t.path));
+    const dbOrphaned = dbThumbnails.filter(
+      (t) => !fs.has(t.path) && !fs.has(t.path.replace('.thumbnails/', '')),
+    );
 
     for (const thumb of dbOrphaned) {
       try {
