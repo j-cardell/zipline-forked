@@ -2,10 +2,12 @@ import { Box } from '@mantine/core';
 
 export default function FullscreenFrame({
   fullscreen,
+  onClick,
   parent,
   children,
 }: {
   fullscreen?: boolean;
+  onClick?: (e: React.MouseEvent) => void;
   parent?: HTMLElement | null;
   children: React.ReactNode;
 }) {
@@ -13,6 +15,7 @@ export default function FullscreenFrame({
 
   return (
     <Box
+      onClick={onClick}
       style={
         parent
           ? {
