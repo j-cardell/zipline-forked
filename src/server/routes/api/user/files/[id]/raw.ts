@@ -13,6 +13,7 @@ import { zQsBoolean } from '@/lib/validation';
 import { userMiddleware } from '@/server/middleware/user';
 import typedPlugin from '@/server/typedPlugin';
 import z from 'zod';
+import { join } from 'path';
 
 const logger = log('routes').c('raw');
 
@@ -47,7 +48,7 @@ export default typedPlugin(
         if (id.startsWith('.thumbnail') || id.startsWith('.thumbnails/')) {
           const thumbnail = await prisma.thumbnail.findFirst({
             where: {
-              path: id,
+              OR: [{ path: id }, { path: join('.thumbnails', id) }],
             },
             include: {
               file: {
