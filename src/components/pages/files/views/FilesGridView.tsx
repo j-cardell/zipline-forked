@@ -22,7 +22,6 @@ import { IconFilesOff, IconFileUpload, IconFolder, IconTrash, IconArchive } from
 import { parseAsInteger, useQueryState } from 'nuqs';
 import {
   lazy,
-  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -33,6 +32,7 @@ import {
 } from 'react';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
+import PhotoAlbum, { RenderPhotoProps } from 'react-photo-album';
 import { useApiPagination } from '../useApiPagination';
 import { useInfiniteFiles } from '../useInfiniteFiles';
 import { useViewStore } from '@/lib/client/store/view';
@@ -45,6 +45,14 @@ const DashboardFileModal = lazy(() => import('@/components/file/DashboardFile/Da
 const PER_PAGE_OPTIONS = [12, 24, 36, 48, 72, 96];
 
 export type FilesGridViewRef = { refresh: () => void };
+
+function defaultAspect(file: File): number {
+  const type = file.type.split('/')[0];
+  if (type === 'video') return 16 / 9;
+  if (type === 'image') return 4 / 3;
+  if (type === 'audio') return 1;
+  return 1;
+}
 
 export default forwardRef<
   FilesGridViewRef,
@@ -209,13 +217,58 @@ export default forwardRef<
     return () => observer.disconnect();
   }, [infinite, infiniteQuery.hasMore, infiniteQuery.isLoadingMore, infiniteQuery.loadMore]);
 
-  const gridClass = [
-    styles.masonry,
-    gridSize === 'compact' && styles.compact,
-    gridSize === 'large' && styles.large,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({});
+
+  const photos = useMemo(
+    () =>
+      data.map((file) => {
+        const known = sizes[file.id];
+        const aspect = known ? known.width / known.height : defaultAspect(file);
+        const width = known?.width ?? Math.round(aspect * 1000);
+        const height = known?.height ?? 1000;
+        return {
+          src: file.thumbnail?.path || '',
+          width,
+          height,
+          key: file.id,
+          file,
+        };
+      }),
+    [data, sizes],
+  );
+
+  const renderPhoto = useCallback(
+    (props: RenderPhotoProps, context: { photo: { file: File } }) => {
+      const file = context.photo.file;
+      return (
+        <div style={{ width: '100%', height: '100%' }} className={styles.albumItem}>
+          <DashboardFile
+            file={file}
+            id={id}
+            onOpen={(fileId) => setCurrent(fileId)}
+            onDelete={refresh}
+            selected={selectedIds.has(file.id)}
+            onSelect={() => handleSelect(file.id)}
+            compact={gridSize === 'compact'}
+          />
+        </div>
+      );
+    },
+    [gridSize, handleSelect, id, refresh, selectedIds, setCurrent],
+  );
+
+  const onImageLoad = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>, fileId: string) => {
+      const img = e.currentTarget;
+      if (img.naturalWidth && img.naturalHeight) {
+        setSizes((prev) => ({
+          ...prev,
+          [fileId]: { width: img.naturalWidth, height: img.naturalHeight },
+        }));
+      }
+    },
+    [setSizes],
+  );
 
   return (
     <>
@@ -296,49 +349,53 @@ export default forwardRef<
         </Stack>
       </Modal>
 
-      <div className={gridClass}>
-        {isLoading ? (
-          [...Array(itemCount)].map((_, i) => (
+      {isLoading ? (
+        <div className={styles.skeletonGrid}>
+          {[...Array(itemCount)].map((_, i) => (
             <Skeleton key={i} height={skeletonHeight} radius='md' animate />
-          ))
-        ) : data.length > 0 ? (
-          data.map((file) => (
-            <Suspense fallback={<Skeleton height={skeletonHeight} radius='md' animate />} key={file.id}>
-              <DashboardFile
-                file={file}
-                id={id}
-                onOpen={(fileId) => setCurrent(fileId)}
-                onDelete={refresh}
-                selected={selectedIds.has(file.id)}
-                onSelect={() => handleSelect(file.id)}
-                compact={gridSize === 'compact'}
-              />
-            </Suspense>
-          ))
-        ) : (
-          <Paper withBorder p='sm' className={styles.empty}>
-            <Center>
-              <Stack>
-                <Group>
-                  <IconFilesOff size='2rem' />
-                  <Title order={2}>No files found</Title>
-                </Group>
-                {!id && (
-                  <Button
-                    variant='outline'
-                    size='compact-sm'
-                    leftSection={<IconFileUpload size='1rem' />}
-                    component={Link}
-                    to='/dashboard/upload/file'
-                  >
-                    Upload a file
-                  </Button>
-                )}
-              </Stack>
-            </Center>
-          </Paper>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : data.length > 0 ? (
+        <>
+          <div className={styles.hiddenMeasure}>
+            {photos.map((photo) =>
+              photo.src ? (
+                <img key={photo.key} src={photo.src} alt='' onLoad={(e) => onImageLoad(e, photo.key)} />
+              ) : null,
+            )}
+          </div>
+          <PhotoAlbum
+            layout='rows'
+            photos={photos}
+            render={{ photo: renderPhoto }}
+            spacing={gridSize === 'compact' ? 4 : 8}
+            padding={0}
+            targetRowHeight={gridSize === 'large' ? 360 : gridSize === 'compact' ? 160 : 240}
+          />
+        </>
+      ) : (
+        <Paper withBorder p='sm' className={styles.empty}>
+          <Center>
+            <Stack>
+              <Group>
+                <IconFilesOff size='2rem' />
+                <Title order={2}>No files found</Title>
+              </Group>
+              {!id && (
+                <Button
+                  variant='outline'
+                  size='compact-sm'
+                  leftSection={<IconFileUpload size='1rem' />}
+                  component={Link}
+                  to='/dashboard/upload/file'
+                >
+                  Upload a file
+                </Button>
+              )}
+            </Stack>
+          </Center>
+        </Paper>
+      )}
 
       {infinite ? (
         <div ref={loadMoreRef} style={{ minHeight: 1 }}>

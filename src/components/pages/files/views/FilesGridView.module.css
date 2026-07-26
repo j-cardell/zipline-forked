@@ -1,74 +1,41 @@
-.masonry {
-  --masonry-gap: var(--mantine-spacing-md);
-  --masonry-row-gap: 6px;
-
-  column-gap: var(--masonry-gap);
-  margin-top: 6px;
-}
-
-.compact {
-  --masonry-gap: var(--mantine-spacing-xs);
-  --masonry-row-gap: 4px;
-}
-
-@media (max-width: 48em) {
-  .masonry {
-    column-count: 2;
-  }
-
-  .compact {
-    column-count: 3;
-  }
-
-  .large {
-    column-count: 1;
-  }
-}
-
-@media (min-width: 48em) and (max-width: 62em) {
-  .masonry {
-    column-count: 3;
-  }
-
-  .compact {
-    column-count: 4;
-  }
-
-  .large {
-    column-count: 2;
-  }
-}
-
-@media (min-width: 62em) and (max-width: 80em) {
-  .masonry {
-    column-count: 4;
-  }
-
-  .compact {
-    column-count: 6;
-  }
-
-  .large {
-    column-count: 3;
-  }
-}
-
-@media (min-width: 80em) {
-  .masonry {
-    column-count: 6;
-  }
-
-  .compact {
-    column-count: 8;
-  }
-
-  .large {
-    column-count: 4;
-  }
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--mantine-spacing-md);
 }
 
 .empty {
-  column-span: all;
+  grid-column: 1 / -1;
+}
+
+.hiddenMeasure {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.albumItem {
+  height: 100%;
+  width: 100%;
+}
+
+.albumItem :global(.mantine-Card-root) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.albumItem :global(img),
+.albumItem :global(video) {
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
@@ -78,8 +45,4 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.spin {
-  animation: spin 1s linear infinite;
 }
