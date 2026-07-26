@@ -45,7 +45,7 @@ export const rawFileHandler = async (
   const idSanitized = sanitizeFilename(id);
   if (!idSanitized) return res.callNotFound();
 
-  if (id.startsWith('.thumbnail')) {
+  if (id.startsWith('.thumbnail') || id.startsWith('.thumbnails/')) {
     const thumbnail = await prisma.thumbnail.findFirst({
       where: {
         path: idSanitized,
@@ -64,7 +64,11 @@ export const rawFileHandler = async (
     if (!buf) return res.callNotFound();
 
     return res
-      .type(await guess(thumbnail.path.replace('.thumbnail-', '').split('.').pop() || 'jpg'))
+      .type(
+        await guess(
+          thumbnail.path.replace('.thumbnails/', '').replace('.thumbnail-', '').split('.').pop() || 'jpg',
+        ),
+      )
       .headers({
         'Content-Length': size,
       })

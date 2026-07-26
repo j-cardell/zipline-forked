@@ -44,7 +44,7 @@ export default typedPlugin(
         const id = sanitizeFilename(req.params.id);
         if (!id) throw new ApiError(9002);
 
-        if (id.startsWith('.thumbnail')) {
+        if (id.startsWith('.thumbnail') || id.startsWith('.thumbnails/')) {
           const thumbnail = await prisma.thumbnail.findFirst({
             where: {
               path: id,
@@ -70,7 +70,12 @@ export default typedPlugin(
           if (!buf) throw new ApiError(9002);
 
           return res
-            .type(await guess(thumbnail.path.replace('.thumbnail-', '').split('.').pop() || 'jpg'))
+            .type(
+              await guess(
+                thumbnail.path.replace('.thumbnails/', '').replace('.thumbnail-', '').split('.').pop() ||
+                  'jpg',
+              ),
+            )
             .headers({
               'Content-Length': size,
             })
