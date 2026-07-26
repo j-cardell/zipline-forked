@@ -26,10 +26,35 @@ import { IconDeviceSdCard, IconFiles, IconTrashFilled, IconUpload, IconX } from 
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
+import FolderSelectModal from '@/components/folders/FolderSelectModal';
+import { modals } from '@mantine/modals';
 import UploadOptionsButton from '../UploadOptionsButton';
 import DropzoneFile from './DropzoneFile';
 
 const initialVisible = 24;
+
+function promptForFolder(_current?: string | null): Promise<string | undefined | null> {
+  return new Promise((resolve) => {
+    const id = modals.open({
+      title: 'Select folder',
+      size: 'lg',
+      centered: true,
+      children: (
+        <FolderSelectModal
+          onSelect={(folderId) => {
+            resolve(folderId);
+            modals.close(id);
+          }}
+          onCancel={() => {
+            resolve(null);
+            modals.close(id);
+          }}
+        />
+      ),
+      onClose: () => resolve(null),
+    });
+  });
+}
 
 export default function UploadFile({ title, folder }: { title?: string; folder?: string }) {
   const theme = useMantineTheme();
@@ -47,6 +72,7 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
   const [visibleCount, setVisibleCount] = useState(initialVisible);
   const [progress, setProgress] = useProgress();
   const [dropLoading, setLoading] = useState(false);
+  const [targetFolder, setTargetFolder] = useState<string | undefined>(folder);
 
   const visibleFiles = files.slice(0, visibleCount);
   const hiddenFiles = Math.max(0, files.length - visibleFiles.length);
@@ -92,34 +118,34 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
           ),
         });
       }
+      if (normalUploads.length > 0) {
+        await uploadFiles(normalUploads, {
+          setFiles,
+          setLoading,
+          setProgress,
+          clipboard,
+          clearEphemeral,
+          options,
+          ephemeral,
+          folder: targetFolder,
+        });
+      }
 
-      await uploadFiles(normalUploads, {
-        setFiles,
-        setLoading,
-        setProgress,
-        clipboard,
-        clearEphemeral,
-        options,
-        ephemeral,
-        folder,
-      });
-    }
-
-    if (partialUploads.length > 0) {
-      await uploadPartialFiles(partialUploads, {
-        setFiles,
-        setLoading,
-        setProgress,
-        clipboard,
-        clearEphemeral,
-        options,
-        ephemeral,
-        config,
-        folder,
-      });
+      if (partialUploads.length > 0) {
+        await uploadPartialFiles(partialUploads, {
+          setFiles,
+          setLoading,
+          setProgress,
+          clipboard,
+          clearEphemeral,
+          options,
+          ephemeral,
+          config,
+          folder: targetFolder,
+        });
+      }
     }
   };
-
   useEffect(() => {
     document.addEventListener('paste', handlePaste);
     return () => {
@@ -280,7 +306,18 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
         >
           Clear all
         </Button>
-        <UploadOptionsButton folder={folder} numFiles={files.length} />
+        <Button
+          variant='outline'
+          leftSection={<IconFiles size='1rem' />}
+          disabled={dropLoading}
+          onClick={async () => {
+            const folderId = await promptForFolder(targetFolder);
+            if (folderId !== null) setTargetFolder(folderId ?? undefined);
+          }}
+        >
+          {targetFolder ? 'Change folder' : 'Select folder'}
+        </Button>
+        <UploadOptionsButton folder={targetFolder} numFiles={files.length} />
         <Button
           variant='outline'
           leftSection={<IconUpload size='1rem' />}
