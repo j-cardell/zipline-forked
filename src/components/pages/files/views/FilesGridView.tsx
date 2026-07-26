@@ -16,7 +16,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { useClipboard } from '@mantine/hooks';
+import { useClipboard, useElementSize } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { IconFilesOff, IconFileUpload, IconFolder, IconTrash, IconArchive } from '@tabler/icons-react';
 import { parseAsInteger, useQueryState } from 'nuqs';
@@ -32,7 +32,7 @@ import {
 } from 'react';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
-import PhotoAlbum, { RenderPhotoProps } from 'react-photo-album';
+import { useJustifiedLayout } from '@/lib/client/layout/useJustifiedLayout';
 import { useApiPagination } from '../useApiPagination';
 import { useInfiniteFiles } from '../useInfiniteFiles';
 import { useViewStore } from '@/lib/client/store/view';
@@ -218,44 +218,27 @@ export default forwardRef<
   }, [infinite, infiniteQuery.hasMore, infiniteQuery.isLoadingMore, infiniteQuery.loadMore]);
 
   const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({});
+  const { ref: containerRef, width: containerWidth } = useElementSize();
 
-  const photos = useMemo(
+  const layoutItems = useMemo(
     () =>
       data.map((file) => {
         const known = sizes[file.id];
-        const aspect = known ? known.width / known.height : defaultAspect(file);
-        const width = known?.width ?? Math.round(aspect * 1000);
-        const height = known?.height ?? 1000;
-        return {
-          src: file.thumbnail?.path || '',
-          width,
-          height,
-          key: file.id,
-          file,
-        };
+        const ratio = known ? known.width / known.height : defaultAspect(file);
+        return { id: file.id, width: ratio, height: 1, originalRatio: ratio };
       }),
     [data, sizes],
   );
 
-  const renderPhoto = useCallback(
-    (props: RenderPhotoProps, context: { photo: { file: File } }) => {
-      const file = context.photo.file;
-      return (
-        <div style={{ width: '100%', height: '100%' }} className={styles.albumItem}>
-          <DashboardFile
-            file={file}
-            id={id}
-            onOpen={(fileId) => setCurrent(fileId)}
-            onDelete={refresh}
-            selected={selectedIds.has(file.id)}
-            onSelect={() => handleSelect(file.id)}
-            compact={gridSize === 'compact'}
-          />
-        </div>
-      );
-    },
-    [gridSize, handleSelect, id, refresh, selectedIds, setCurrent],
-  );
+  const targetRowHeight = gridSize === 'large' ? 320 : gridSize === 'compact' ? 140 : 220;
+  const gap = gridSize === 'compact' ? 4 : 8;
+  const rows = useJustifiedLayout(layoutItems, containerWidth, targetRowHeight, gap);
+
+  const fileById = useMemo(() => {
+    const map = new Map<string, File>();
+    for (const file of data) map.set(file.id, file);
+    return map;
+  }, [data]);
 
   const onImageLoad = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>, fileId: string) => {
@@ -358,20 +341,52 @@ export default forwardRef<
       ) : data.length > 0 ? (
         <>
           <div className={styles.hiddenMeasure}>
-            {photos.map((photo) =>
-              photo.src ? (
-                <img key={photo.key} src={photo.src} alt='' onLoad={(e) => onImageLoad(e, photo.key)} />
-              ) : null,
-            )}
+            {data.map((file) => {
+              const src = file.thumbnail?.path
+                ? `/api/user/files/${file.thumbnail.path}/raw`
+                : `/api/user/files/${file.id}/raw`;
+              return <img key={file.id} src={src} alt='' onLoad={(e) => onImageLoad(e, file.id)} />;
+            })}
           </div>
-          <PhotoAlbum
-            layout='rows'
-            photos={photos}
-            render={{ photo: renderPhoto }}
-            spacing={gridSize === 'compact' ? 4 : 8}
-            padding={0}
-            targetRowHeight={gridSize === 'large' ? 360 : gridSize === 'compact' ? 160 : 240}
-          />
+          <div ref={containerRef} className={styles.justifiedGrid}>
+            {rows.map((row, rowIndex) => (
+              <div
+                key={rowIndex}
+                className={styles.justifiedRow}
+                style={{
+                  height: row.rowHeight,
+                  gap,
+                }}
+              >
+                {row.items.map((item) => {
+                  const file = fileById.get(item.id);
+                  if (!file) return null;
+                  const itemWidth = item.originalRatio * row.rowHeight;
+                  return (
+                    <div
+                      key={file.id}
+                      className={styles.justifiedItem}
+                      style={{ width: itemWidth, height: row.rowHeight }}
+                    >
+                      <DashboardFile
+                        file={file}
+                        id={id}
+                        onOpen={(fileId) => setCurrent(fileId)}
+                        onDelete={refresh}
+                        selected={selectedIds.has(file.id)}
+                        onSelect={(e) => {
+                          e?.preventDefault?.();
+                          handleSelect(file.id);
+                        }}
+                        compact={gridSize === 'compact'}
+                        fill
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </>
       ) : (
         <Paper withBorder p='sm' className={styles.empty}>
