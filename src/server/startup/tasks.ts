@@ -27,8 +27,7 @@ export function startTasks(server: FastifyInstance) {
     tasks.interval('metrics', ms(config.tasks.metricsInterval as StringValue), metrics(prisma));
 
   if (config.features.thumbnails.enabled) {
-    tasks.interval('thumbnails', ms(config.tasks.thumbnailsInterval as StringValue), thumbnails(prisma));
-
+    // Register workers before the interval task so the first run can use them
     for (let i = 0; i !== config.features.thumbnails.num_threads; ++i) {
       tasks.worker(
         `thumbnail-${i}`,
@@ -68,6 +67,8 @@ export function startTasks(server: FastifyInstance) {
         },
       );
     }
+
+    tasks.interval('thumbnails', ms(config.tasks.thumbnailsInterval as StringValue), thumbnails(prisma));
   }
 
   tasks.start();

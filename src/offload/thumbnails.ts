@@ -43,8 +43,8 @@ const formatMimes = {
 
 const workerId = randomCharacters(8);
 
-function name(str: string) {
-  return `${str}.${config.features.thumbnails.format}`;
+function name(fileId: string) {
+  return `.thumbnail.${fileId}.${config.features.thumbnails.format}`;
 }
 
 function genThumbnail(input: string, output: string): Promise<Buffer | undefined> {
@@ -53,10 +53,10 @@ function genThumbnail(input: string, output: string): Promise<Buffer | undefined
       .videoFilters('thumbnail')
       .frames(1)
       .output(output)
-      .on('start', (cmd) => {
+      .on('start', (cmd: string) => {
         logger.debug('generating thumbnail', { cmd });
       })
-      .on('error', (err, _, stderr) => {
+      .on('error', (err: Error, _: any, stderr: string) => {
         if (stderr && stderr.includes('does not contain any stream')) {
           // mismatched mimetype, for example a video/ogg (.ogg) file with no video stream since
           // for this specific case just set the mimetype to audio/ogg
@@ -130,15 +130,18 @@ async function generate(config: Config, datasource: Datasource, ids: string[]) {
       writeStream.on('finish', resolve as any);
     });
 
-    const thumbnailTmpFile = join(config.core.tempDirectory, name(`zthumbnail_${file.id}_${workerId}`));
+    const thumbnailTmpFile = join(
+      config.core.tempDirectory,
+      `${name(file.id)}_${workerId}.${config.features.thumbnails.format}`,
+    );
     const thumbnail = await genThumbnail(tmpFile, thumbnailTmpFile);
     if (!thumbnail || thumbnail.length === 0) continue;
 
-    const existing = await datasource.size(name(`.thumbnail.${file.id}`));
+    const existing = await datasource.size(name(file.id));
     if (existing || existing === 0) {
-      await datasource.delete(name(`.thumbnail.${file.id}`));
+      await datasource.delete(name(file.id));
     }
-    await datasource.put(name(`.thumbnail.${file.id}`), thumbnail, {
+    await datasource.put(name(file.id), thumbnail, {
       mimetype: formatMimes[config.features.thumbnails.format] || 'image/jpeg',
     });
 
@@ -153,7 +156,7 @@ async function generate(config: Config, datasource: Datasource, ids: string[]) {
       t = await dbProxy<ThumbnailId>('thumbnail.create', {
         data: {
           fileId: file.id,
-          path: name(`.thumbnail.${file.id}`),
+          path: name(file.id),
         },
       });
     } else {

@@ -1,6 +1,16 @@
 import { createReadStream, existsSync } from 'fs';
-import { access, constants, copyFile, readdir, rename, rm, stat, writeFile } from 'fs/promises';
-import { join, resolve, sep } from 'path';
+import {
+  access,
+  constants,
+  copyFile,
+  mkdir,
+  readdir,
+  rename as renameFs,
+  rm,
+  stat,
+  writeFile,
+} from 'fs/promises';
+import { dirname, join, resolve, sep } from 'path';
 import { Readable } from 'stream';
 import { Datasource, ListOptions, PutOptions } from './Datasource';
 import { log } from '../logger';
@@ -18,19 +28,28 @@ function isCrossDeviceMove(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EXDEV';
 }
 
+function isThumbnail(file: string): boolean {
+  return file.startsWith('.thumbnail.');
+}
+
 export class LocalDatasource extends Datasource {
   name = 'local';
   logger = log('datasource').c('local');
+  public thumbnailsDir: string;
 
   constructor(public dir: string) {
     super();
+    this.thumbnailsDir = join(dir, '.thumbnails');
   }
 
   private resolvePath(file: string): string | void {
-    const resolved = resolve(this.dir, file);
+    // Thumbnails are stored in a .thumbnails subfolder, but addressed by their flat name everywhere else.
+    const effectiveFile = isThumbnail(file) ? join('.thumbnails', file) : file;
+    const resolved = resolve(this.dir, effectiveFile);
     const uploadsDir = resolve(this.dir);
+    const thumbsDir = resolve(this.thumbnailsDir);
 
-    if (!resolved.startsWith(uploadsDir + sep)) return;
+    if (!resolved.startsWith(uploadsDir + sep) && !resolved.startsWith(thumbsDir + sep)) return;
 
     return resolved;
   }
@@ -48,6 +67,8 @@ export class LocalDatasource extends Datasource {
     const path = this.resolvePath(file);
     if (!path) throw new Error('Invalid path provided');
 
+    await mkdir(dirname(path), { recursive: true });
+
     // handles path-based writes without duplicating bytes when the source can be consumed
     if (typeof data === 'string' && data.startsWith('/')) {
       const exists = await existsAndCanRW(data);
@@ -58,7 +79,7 @@ export class LocalDatasource extends Datasource {
 
       if (!noDelete) {
         try {
-          await rename(data, path);
+          await renameFs(data, path);
           return;
         } catch (e) {
           if (!isCrossDeviceMove(e)) throw e;
@@ -130,12 +151,24 @@ export class LocalDatasource extends Datasource {
     if (!existsSync(fromPath))
       throw new Error(`Something went very wrong! File ${from} does not exist in local datasource.`);
 
-    return rename(fromPath, toPath);
+    await mkdir(dirname(toPath), { recursive: true });
+    return renameFs(fromPath, toPath);
   }
 
   public async list(options: ListOptions = { prefix: '' }): Promise<string[]> {
     const files = await readdir(this.dir, { withFileTypes: true });
+    const thumbsDir = join(this.dir, '.thumbnails');
+    let thumbs: string[] = [];
+    if (existsSync(thumbsDir)) {
+      const thumbFiles = await readdir(thumbsDir, { withFileTypes: true });
+      thumbs = thumbFiles
+        .filter((f) => f.isFile() && f.name.startsWith(options.prefix || ''))
+        .map((f) => f.name);
+    }
 
-    return files.filter((f) => f.isFile() && f.name.startsWith(options.prefix || '')).map((f) => f.name);
+    return [
+      ...files.filter((f) => f.isFile() && f.name.startsWith(options.prefix || '')).map((f) => f.name),
+      ...thumbs,
+    ];
   }
 }
