@@ -9,6 +9,7 @@ import fastify from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { mkdir } from 'fs/promises';
 import { join } from 'path';
+import { migrateThumbnailsToSubfolder } from './startup/migrateThumbnails';
 import { registerHandlers } from './startup/handlers';
 import { listenServer } from './startup/listen';
 import { startMemoryLog } from './startup/memory';
@@ -50,6 +51,7 @@ async function main() {
   if (config.datasource.type === 'local') {
     await mkdir(config.datasource.local!.directory, { recursive: true });
     await mkdir(join(config.datasource.local!.directory, '_manual_uploads'), { recursive: true });
+    await migrateThumbnailsToSubfolder();
   }
 
   await mkdir(config.core.tempDirectory, { recursive: true });
