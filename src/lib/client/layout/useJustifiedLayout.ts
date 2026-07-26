@@ -10,8 +10,7 @@ export type JustifiedItem = {
 export type JustifiedRow = {
   items: JustifiedItem[];
   rowHeight: number;
-  totalWidth: number;
-  isLast: boolean;
+  ratioSum: number;
 };
 
 export function computeJustifiedRows(
@@ -19,52 +18,48 @@ export function computeJustifiedRows(
   containerWidth: number,
   targetRowHeight: number,
   gap: number,
-  maxRowHeight = targetRowHeight * 2,
 ): JustifiedRow[] {
   if (containerWidth <= 0 || items.length === 0) return [];
 
   const rows: JustifiedRow[] = [];
   let currentRow: JustifiedItem[] = [];
-  let currentWidth = 0;
+  let currentRatioSum = 0;
 
-  const flushRow = (isLast: boolean) => {
+  const flushRow = () => {
     if (currentRow.length === 0) return;
 
     const gaps = Math.max(0, currentRow.length - 1) * gap;
-    const rawWidth = currentWidth + gaps;
+    const availableWidth = Math.max(1, containerWidth - gaps);
 
+    // Scale row to fill available width while keeping aspect ratios.
+    // For a single item this naturally fills the whole width.
     let rowHeight = targetRowHeight;
-
-    if (rawWidth > containerWidth && currentRow.length > 1) {
-      // scale down to fit container width
-      const scale = (containerWidth - gaps) / (rawWidth - gaps);
-      rowHeight = Math.min(maxRowHeight, targetRowHeight * scale);
+    if (currentRatioSum * targetRowHeight > availableWidth) {
+      rowHeight = availableWidth / currentRatioSum;
     }
 
-    const totalWidth = currentRow.reduce((sum, item) => sum + item.originalRatio * rowHeight, 0) + gaps;
-
-    rows.push({ items: currentRow, rowHeight, totalWidth, isLast });
+    rows.push({ items: currentRow, rowHeight, ratioSum: currentRatioSum });
 
     currentRow = [];
-    currentWidth = 0;
+    currentRatioSum = 0;
   };
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const itemWidth = item.originalRatio * targetRowHeight;
+    const projectedGaps = Math.max(0, currentRow.length) * gap;
 
-    const newGaps = Math.max(0, currentRow.length) * gap;
-    const projectedWidth = currentWidth + itemWidth + newGaps;
-
-    if (currentRow.length > 0 && projectedWidth > containerWidth) {
-      flushRow(false);
+    if (
+      currentRow.length > 0 &&
+      (currentRatioSum + item.originalRatio) * targetRowHeight + projectedGaps > containerWidth
+    ) {
+      flushRow();
     }
 
     currentRow.push(item);
-    currentWidth += itemWidth;
+    currentRatioSum += item.originalRatio;
   }
 
-  flushRow(true);
+  flushRow();
 
   return rows;
 }

@@ -361,12 +361,15 @@ export default forwardRef<
                 {row.items.map((item) => {
                   const file = fileById.get(item.id);
                   if (!file) return null;
-                  const itemWidth = item.originalRatio * row.rowHeight;
                   return (
                     <div
                       key={file.id}
                       className={styles.justifiedItem}
-                      style={{ width: itemWidth, height: row.rowHeight }}
+                      style={{
+                        flex: `${item.originalRatio} 1 0%`,
+                        minWidth: 0,
+                        height: row.rowHeight,
+                      }}
                     >
                       <DashboardFile
                         file={file}

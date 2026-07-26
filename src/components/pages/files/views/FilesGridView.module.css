@@ -28,10 +28,12 @@
   flex-direction: row;
   align-items: stretch;
   width: 100%;
+  max-width: 100%;
 }
 
 .justifiedItem {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   overflow: hidden;
   border-radius: var(--mantine-radius-md);
 }
