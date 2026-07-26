@@ -21,15 +21,40 @@ import {
 } from '@mantine/core';
 import { Dropzone } from '@mantine/dropzone';
 import { useClipboard, useColorScheme } from '@mantine/hooks';
-import { notifications, showNotification } from '@mantine/notifications';
+import { notifications } from '@mantine/notifications';
 import { IconDeviceSdCard, IconFiles, IconTrashFilled, IconUpload, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
+import FolderSelectModal from '@/components/folders/FolderSelectModal';
+import { modals } from '@mantine/modals';
 import UploadOptionsButton from '../UploadOptionsButton';
 import DropzoneFile from './DropzoneFile';
 
 const initialVisible = 24;
+
+function promptForFolder(_current?: string | null): Promise<string | undefined | null> {
+  return new Promise((resolve) => {
+    const id = modals.open({
+      title: 'Select folder',
+      size: 'lg',
+      centered: true,
+      children: (
+        <FolderSelectModal
+          onSelect={(folderId) => {
+            resolve(folderId);
+            modals.close(id);
+          }}
+          onCancel={() => {
+            resolve(null);
+            modals.close(id);
+          }}
+        />
+      ),
+      onClose: () => resolve(null),
+    });
+  });
+}
 
 export default function UploadFile({ title, folder }: { title?: string; folder?: string }) {
   const theme = useMantineTheme();
@@ -47,23 +72,25 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
   const [visibleCount, setVisibleCount] = useState(initialVisible);
   const [progress, setProgress] = useProgress();
   const [dropLoading, setLoading] = useState(false);
+  const [targetFolder, setTargetFolder] = useState<string | undefined>(folder);
 
   const visibleFiles = files.slice(0, visibleCount);
   const hiddenFiles = Math.max(0, files.length - visibleFiles.length);
 
   const aggSize = useCallback(() => files.reduce((acc, file) => acc + file.size, 0), [files]);
 
-  const handlePaste = useCallback((e: ClipboardEvent) => {
-    if (!e.clipboardData) return;
-    for (let i = 0; i !== e.clipboardData.items.length; ++i) {
-      if (!e.clipboardData.items[i].type.startsWith('image')) return;
-      const blob = e.clipboardData.items[i].getAsFile();
-      if (!blob) return;
-      setFiles((prev) => [...prev, blob]);
-      setVisibleCount(initialVisible);
-      showNotification({ message: `Image ${blob.name} pasted from clipboard`, color: 'blue' });
+  const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    if (files.length > 0) {
+      e.preventDefault();
     }
-  }, []);
+  };
+
+  useEffect(() => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [files.length]);
 
   const upload = async () => {
     const maxBytes = config.chunks.enabled && bytes(config.chunks.max);
@@ -86,7 +113,6 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
           ),
         });
       }
-
       await uploadFiles(normalUploads, {
         setFiles,
         setLoading,
@@ -95,7 +121,7 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
         clearEphemeral,
         options,
         ephemeral,
-        folder,
+        folder: targetFolder,
       });
     }
 
@@ -109,30 +135,10 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
         options,
         ephemeral,
         config,
-        folder,
+        folder: targetFolder,
       });
     }
   };
-
-  useEffect(() => {
-    document.addEventListener('paste', handlePaste);
-    return () => {
-      document.removeEventListener('paste', handlePaste);
-    };
-  }, [handlePaste]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (files.length > 0) {
-        e.preventDefault();
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [files.length]);
 
   if (!config) return null;
 
@@ -274,7 +280,18 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
         >
           Clear all
         </Button>
-        <UploadOptionsButton folder={folder} numFiles={files.length} />
+        <Button
+          variant='outline'
+          leftSection={<IconFiles size='1rem' />}
+          disabled={dropLoading}
+          onClick={async () => {
+            const folderId = await promptForFolder(targetFolder);
+            if (folderId !== null) setTargetFolder(folderId ?? undefined);
+          }}
+        >
+          {targetFolder ? 'Change folder' : 'Select folder'}
+        </Button>
+        <UploadOptionsButton folder={targetFolder} numFiles={files.length} />
         <Button
           variant='outline'
           leftSection={<IconUpload size='1rem' />}

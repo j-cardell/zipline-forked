@@ -16,13 +16,12 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { useClipboard } from '@mantine/hooks';
+import { useClipboard, useElementSize } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { IconFilesOff, IconFileUpload, IconFolder, IconTrash, IconArchive } from '@tabler/icons-react';
 import { parseAsInteger, useQueryState } from 'nuqs';
 import {
   lazy,
-  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -33,6 +32,7 @@ import {
 } from 'react';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
+import { useJustifiedLayout } from '@/lib/client/layout/useJustifiedLayout';
 import { useApiPagination } from '../useApiPagination';
 import { useInfiniteFiles } from '../useInfiniteFiles';
 import { useViewStore } from '@/lib/client/store/view';
@@ -45,6 +45,14 @@ const DashboardFileModal = lazy(() => import('@/components/file/DashboardFile/Da
 const PER_PAGE_OPTIONS = [12, 24, 36, 48, 72, 96];
 
 export type FilesGridViewRef = { refresh: () => void };
+
+function defaultAspect(file: File): number {
+  const type = file.type.split('/')[0];
+  if (type === 'video') return 16 / 9;
+  if (type === 'image') return 4 / 3;
+  if (type === 'audio') return 1;
+  return 1;
+}
 
 export default forwardRef<
   FilesGridViewRef,
@@ -209,13 +217,41 @@ export default forwardRef<
     return () => observer.disconnect();
   }, [infinite, infiniteQuery.hasMore, infiniteQuery.isLoadingMore, infiniteQuery.loadMore]);
 
-  const gridClass = [
-    styles.masonry,
-    gridSize === 'compact' && styles.compact,
-    gridSize === 'large' && styles.large,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({});
+  const { ref: containerRef, width: containerWidth } = useElementSize();
+
+  const layoutItems = useMemo(
+    () =>
+      data.map((file) => {
+        const known = sizes[file.id];
+        const ratio = known ? known.width / known.height : defaultAspect(file);
+        return { id: file.id, width: ratio, height: 1, originalRatio: ratio };
+      }),
+    [data, sizes],
+  );
+
+  const targetRowHeight = gridSize === 'large' ? 320 : gridSize === 'compact' ? 140 : 220;
+  const gap = gridSize === 'compact' ? 4 : 8;
+  const rows = useJustifiedLayout(layoutItems, containerWidth, targetRowHeight, gap);
+
+  const fileById = useMemo(() => {
+    const map = new Map<string, File>();
+    for (const file of data) map.set(file.id, file);
+    return map;
+  }, [data]);
+
+  const onImageLoad = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>, fileId: string) => {
+      const img = e.currentTarget;
+      if (img.naturalWidth && img.naturalHeight) {
+        setSizes((prev) => ({
+          ...prev,
+          [fileId]: { width: img.naturalWidth, height: img.naturalHeight },
+        }));
+      }
+    },
+    [setSizes],
+  );
 
   return (
     <>
@@ -296,49 +332,88 @@ export default forwardRef<
         </Stack>
       </Modal>
 
-      <div className={gridClass}>
-        {isLoading ? (
-          [...Array(itemCount)].map((_, i) => (
+      {isLoading ? (
+        <div className={styles.skeletonGrid}>
+          {[...Array(itemCount)].map((_, i) => (
             <Skeleton key={i} height={skeletonHeight} radius='md' animate />
-          ))
-        ) : data.length > 0 ? (
-          data.map((file) => (
-            <Suspense fallback={<Skeleton height={skeletonHeight} radius='md' animate />} key={file.id}>
-              <DashboardFile
-                file={file}
-                id={id}
-                onOpen={(fileId) => setCurrent(fileId)}
-                onDelete={refresh}
-                selected={selectedIds.has(file.id)}
-                onSelect={() => handleSelect(file.id)}
-                compact={gridSize === 'compact'}
-              />
-            </Suspense>
-          ))
-        ) : (
-          <Paper withBorder p='sm' className={styles.empty}>
-            <Center>
-              <Stack>
-                <Group>
-                  <IconFilesOff size='2rem' />
-                  <Title order={2}>No files found</Title>
-                </Group>
-                {!id && (
-                  <Button
-                    variant='outline'
-                    size='compact-sm'
-                    leftSection={<IconFileUpload size='1rem' />}
-                    component={Link}
-                    to='/dashboard/upload/file'
-                  >
-                    Upload a file
-                  </Button>
-                )}
-              </Stack>
-            </Center>
-          </Paper>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : data.length > 0 ? (
+        <>
+          <div className={styles.hiddenMeasure}>
+            {data.map((file) => {
+              const src = file.thumbnail?.path
+                ? `/api/user/files/${file.thumbnail.path}/raw`
+                : `/api/user/files/${file.id}/raw`;
+              return <img key={file.id} src={src} alt='' onLoad={(e) => onImageLoad(e, file.id)} />;
+            })}
+          </div>
+          <div ref={containerRef} className={styles.justifiedGrid}>
+            {rows.map((row, rowIndex) => (
+              <div
+                key={rowIndex}
+                className={styles.justifiedRow}
+                style={{
+                  height: row.rowHeight,
+                  gap,
+                }}
+              >
+                {row.items.map((item) => {
+                  const file = fileById.get(item.id);
+                  if (!file) return null;
+                  return (
+                    <div
+                      key={file.id}
+                      className={styles.justifiedItem}
+                      style={{
+                        flex: `${item.originalRatio} 1 0%`,
+                        minWidth: 0,
+                        height: row.rowHeight,
+                      }}
+                    >
+                      <DashboardFile
+                        file={file}
+                        id={id}
+                        onOpen={(fileId) => setCurrent(fileId)}
+                        onDelete={refresh}
+                        selected={selectedIds.has(file.id)}
+                        onSelect={(e) => {
+                          e?.preventDefault?.();
+                          handleSelect(file.id);
+                        }}
+                        compact={gridSize === 'compact'}
+                        fill
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <Paper withBorder p='sm' className={styles.empty}>
+          <Center>
+            <Stack>
+              <Group>
+                <IconFilesOff size='2rem' />
+                <Title order={2}>No files found</Title>
+              </Group>
+              {!id && (
+                <Button
+                  variant='outline'
+                  size='compact-sm'
+                  leftSection={<IconFileUpload size='1rem' />}
+                  component={Link}
+                  to='/dashboard/upload/file'
+                >
+                  Upload a file
+                </Button>
+              )}
+            </Stack>
+          </Center>
+        </Paper>
+      )}
 
       {infinite ? (
         <div ref={loadMoreRef} style={{ minHeight: 1 }}>

@@ -130,6 +130,7 @@ export default function DashboardFileType({
   fullscreen,
   scrollParent,
   compact,
+  fill,
 }: {
   file: DbFile | File;
   show?: boolean;
@@ -140,6 +141,7 @@ export default function DashboardFileType({
   fullscreen?: boolean;
   scrollParent?: HTMLElement | null;
   compact?: boolean;
+  fill?: boolean;
 }) {
   const disableMediaPreview = useSettingsStore((state) => state.settings.disableMediaPreview);
   const mediaAutoMuted = useSettingsStore((state) => state.settings.mediaAutoMuted);
@@ -194,12 +196,12 @@ export default function DashboardFileType({
     if (!show) {
       if (thumbnailUrl) {
         return (
-          <Box pos='relative'>
+          <Box pos='relative' style={fill ? { width: '100%', height: '100%' } : undefined}>
             <MantineImage
               src={thumbnailUrl}
               alt={file.name || 'Video thumbnail'}
-              fit='contain'
-              style={{ width: '100%' }}
+              fit={fill ? 'cover' : 'contain'}
+              style={fill ? { width: '100%', height: '100%' } : { width: '100%' }}
             />
             <Center pos='absolute' inset={0}>
               <IconPlayerPlay
@@ -245,7 +247,12 @@ export default function DashboardFileType({
 
     if (!show) {
       return (
-        <MantineImage fit='contain' src={fileUrl} alt={file.name || 'Image'} style={{ width: '100%' }} />
+        <MantineImage
+          fit={fill ? 'cover' : 'contain'}
+          src={fileUrl}
+          alt={file.name || 'Image'}
+          style={fill ? { width: '100%', height: '100%' } : { width: '100%' }}
+        />
       );
     }
 

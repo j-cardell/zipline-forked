@@ -55,13 +55,24 @@ export function useInfiniteFiles(options: InfiniteFilesOptions = {}) {
 
   const pages = data ?? [];
   const allFiles = pages.flatMap((page) => page.page ?? []);
+  const uniqueFiles = [];
+  const seen = new Set<string>();
+  for (const file of allFiles) {
+    if (!seen.has(file.id)) {
+      seen.add(file.id);
+      uniqueFiles.push(file);
+    }
+  }
+
   const totalRecords = pages[0]?.total ?? 0;
   const totalPages = pages[0]?.pages ?? 1;
   const hasMore = size < totalPages;
   const isLoadingMore = isValidating && data && data.length >= size && size > 0;
 
   const loadMore = () => {
-    if (hasMore && !isValidating) setSize(size + 1);
+    if (hasMore && !isValidating) {
+      setSize((s) => (s < totalPages ? s + 1 : s));
+    }
   };
 
   const reset = () => {
@@ -69,7 +80,7 @@ export function useInfiniteFiles(options: InfiniteFilesOptions = {}) {
   };
 
   return {
-    data: allFiles,
+    data: uniqueFiles,
     totalRecords,
     totalPages,
     isLoading,

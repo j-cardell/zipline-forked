@@ -1,74 +1,96 @@
-.masonry {
-  --masonry-gap: var(--mantine-spacing-md);
-  --masonry-row-gap: 6px;
-
-  column-gap: var(--masonry-gap);
-  margin-top: 6px;
-}
-
-.compact {
-  --masonry-gap: var(--mantine-spacing-xs);
-  --masonry-row-gap: 4px;
-}
-
-@media (max-width: 48em) {
-  .masonry {
-    column-count: 2;
-  }
-
-  .compact {
-    column-count: 3;
-  }
-
-  .large {
-    column-count: 1;
-  }
-}
-
-@media (min-width: 48em) and (max-width: 62em) {
-  .masonry {
-    column-count: 3;
-  }
-
-  .compact {
-    column-count: 4;
-  }
-
-  .large {
-    column-count: 2;
-  }
-}
-
-@media (min-width: 62em) and (max-width: 80em) {
-  .masonry {
-    column-count: 4;
-  }
-
-  .compact {
-    column-count: 6;
-  }
-
-  .large {
-    column-count: 3;
-  }
-}
-
-@media (min-width: 80em) {
-  .masonry {
-    column-count: 6;
-  }
-
-  .compact {
-    column-count: 8;
-  }
-
-  .large {
-    column-count: 4;
-  }
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--mantine-spacing-md);
 }
 
 .empty {
-  column-span: all;
+  grid-column: 1 / -1;
+}
+
+.hiddenMeasure {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.justifiedGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.justifiedRow {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+}
+
+.justifiedItem {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--mantine-radius-md);
+}
+
+.justifiedItem > div {
+  height: 100%;
+  margin-bottom: 0 !important;
+}
+
+.justifiedItem :global(.mantine-Card-root),
+.justifiedItem :global(.mantine-Paper-root) {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.justifiedItem :global(._file_g0q8w_1),
+.justifiedItem :global(.mantine-Card-root) {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.justifiedItem :global(.mantine-Image-root) {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.justifiedItem :global(.mantine-Image-root) img,
+.justifiedItem :global(.mantine-Image-root) figure,
+.justifiedItem :global(img) {
+  height: 100% !important;
+  width: 100% !important;
+  object-fit: cover !important;
+}
+
+.justifiedItem :global(video) {
+  height: 100% !important;
+  width: 100% !important;
+  object-fit: cover !important;
+}
+
+.justifiedItem :global(.mantine-Center-root),
+.justifiedItem :global(.mantine-Paper-root),
+.justifiedItem :global(.mantine-Stack-root) {
+  height: 100%;
+  width: 100%;
+}
+
+.justifiedItem :global(.mantine-Card-section) {
+  height: 100% !important;
+}
+
+.justifiedItem :global(.mantine-Image-root) {
+  display: flex !important;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
@@ -78,8 +100,4 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.spin {
-  animation: spin 1s linear infinite;
 }
