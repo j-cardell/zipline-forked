@@ -21,15 +21,74 @@ import { ApiUploadResponse } from '.';
 
 const logger = log('api').c('upload').c('partial');
 
-const partialsCache = new Map<string, { length: number; options: UploadOptions; prefix: string }>();
+const PARTIAL_TIMEOUT = 30 * 60_000;
+const MAX_PARTIALS = 4;
 
-function createPartial(options: UploadOptions) {
+type PartialCache = {
+  length: number;
+  options: UploadOptions;
+  prefix: string;
+  actorKey: string;
+  quotaUserId: string | null;
+  total: number;
+  finalized: boolean;
+  timeout?: NodeJS.Timeout;
+};
+
+const partialsCache = new Map<string, PartialCache>();
+
+function resetPartialTimeout(identifier: string) {
+  const cache = partialsCache.get(identifier);
+  if (!cache || cache.finalized) return;
+
+  if (cache.timeout) clearTimeout(cache.timeout);
+  cache.timeout = setTimeout(() => {
+    void deletePartial(identifier).catch((error) => {
+      logger.warn('failed to clean up inactive partial upload', { identifier, error });
+    });
+  }, PARTIAL_TIMEOUT);
+  cache.timeout.unref();
+}
+
+function createPartial(options: UploadOptions, actorKey: string, quotaUserId: string | null, total: number) {
   const identifier = randomCharacters(8);
 
   const prefix = `zipline_partial_${identifier}_`;
 
-  partialsCache.set(identifier, { length: 0, options, prefix });
+  partialsCache.set(identifier, {
+    length: 0,
+    options,
+    prefix,
+    actorKey,
+    quotaUserId,
+    total,
+    finalized: false,
+  });
+  resetPartialTimeout(identifier);
+
   return identifier;
+}
+
+function activePartials(actorKey: string) {
+  let count = 0;
+  for (const partial of partialsCache.values()) {
+    if (partial.actorKey === actorKey && ++count >= MAX_PARTIALS) return count;
+  }
+
+  return count;
+}
+
+function quotaReservations(quotaUserId: string) {
+  let size = 0;
+  let files = 0;
+  for (const partial of partialsCache.values()) {
+    if (partial.quotaUserId !== quotaUserId || partial.finalized) continue;
+
+    size += partial.total;
+    files++;
+  }
+
+  return { size, files };
 }
 
 async function deletePartial(identifier: string, deleteFiles = true) {
@@ -37,6 +96,7 @@ async function deletePartial(identifier: string, deleteFiles = true) {
   if (!cache) return;
 
   partialsCache.delete(identifier);
+  if (cache.timeout) clearTimeout(cache.timeout);
 
   if (deleteFiles) {
     const tempFiles = await readdir(config.core.tempDirectory);
@@ -44,6 +104,23 @@ async function deletePartial(identifier: string, deleteFiles = true) {
       tempFiles.filter((f) => f.startsWith(cache.prefix)).map((f) => rm(join(config.core.tempDirectory, f))),
     );
   }
+}
+
+async function deleteOrphanedPartialFiles() {
+  const tempFiles = await readdir(config.core.tempDirectory);
+  const orphaned = tempFiles.filter((file) => {
+    if (!file.startsWith('zipline_partial_')) return false;
+
+    for (const partial of partialsCache.values()) {
+      if (file.startsWith(partial.prefix)) return false;
+    }
+
+    return true;
+  });
+
+  await Promise.all(orphaned.map((file) => rm(join(config.core.tempDirectory, file), { force: true })));
+
+  if (orphaned.length) logger.info('cleaned up orphaned partial uploads', { files: orphaned.length });
 }
 
 export type ApiUploadPartialResponse = ApiUploadResponse & {
@@ -54,6 +131,18 @@ export type ApiUploadPartialResponse = ApiUploadResponse & {
 export const PATH = '/api/upload/partial';
 export default typedPlugin(
   async (server) => {
+    await deleteOrphanedPartialFiles().catch((error) => {
+      logger.warn('failed to clean up orphaned partial uploads on startup', { error });
+    });
+
+    const orphanCleanup = setInterval(() => {
+      void deleteOrphanedPartialFiles().catch((error) => {
+        logger.warn('failed to clean up orphaned partial uploads', { error });
+      });
+    }, PARTIAL_TIMEOUT);
+    orphanCleanup.unref();
+    server.addHook('onClose', async () => clearInterval(orphanCleanup));
+
     const rateLimit = server.rateLimit
       ? server.rateLimit()
       : (_req: any, _res: any, next: () => any) => next();
@@ -79,6 +168,10 @@ export default typedPlugin(
         if (!options.partial) throw new ApiError(1004);
         if (!options.partial.range || options.partial.range.length !== 3) throw new ApiError(1002);
 
+        const [start, end, total] = options.partial.range;
+        if (start < 0 || end < start || total < 0 || end > total) throw new ApiError(1002);
+        if (total > bytes(config.files.maxFileSize)) throw new ApiError(5001);
+
         let folder = null;
         if (options.folder) {
           folder = await prisma.folder.findFirst({
@@ -92,7 +185,56 @@ export default typedPlugin(
           if (!ownsFolder && !folder.allowUploads) throw new ApiError(req.user ? 3011 : 3002);
         }
 
-        const { files } = await req.saveRequestFiles({ tmpdir: config.core.tempDirectory });
+        // use quota of folder owner for anonymous uploads
+        const quotaUser = req.user
+          ? req.user
+          : folder?.userId
+            ? await prisma.user.findUnique({ where: { id: folder.userId }, select: limitedUserSelect })
+            : null;
+
+        const actorKey = req.user ? `user:${req.user.id}` : `anonymous:${folder?.id ?? 'unknown'}:${req.ip}`;
+
+        let cache: PartialCache | undefined;
+        if (start === 0) {
+          if (activePartials(actorKey) >= MAX_PARTIALS)
+            throw new ApiError(1003, 'Too many active partial uploads');
+
+          options.partial.identifier = createPartial(options, actorKey, quotaUser?.id ?? null, total);
+          cache = partialsCache.get(options.partial.identifier);
+
+          if (quotaUser?.id) {
+            const reserved = quotaReservations(quotaUser.id);
+            const quotaCheck = await checkQuota(quotaUser, reserved.size, reserved.files);
+            if (quotaCheck !== true) {
+              await deletePartial(options.partial.identifier);
+              throw new ApiError(5002, typeof quotaCheck === 'string' ? quotaCheck : undefined);
+            }
+          }
+        } else {
+          if (!options.partial.identifier) throw new ApiError(1003);
+
+          cache = partialsCache.get(options.partial.identifier);
+          if (
+            !cache ||
+            cache.actorKey !== actorKey ||
+            cache.options.folder !== options.folder ||
+            cache.total !== total ||
+            cache.finalized
+          )
+            throw new ApiError(1003);
+
+          resetPartialTimeout(options.partial.identifier);
+        }
+
+        if (!cache) throw new ApiError(1003);
+
+        let files;
+        try {
+          ({ files } = await req.saveRequestFiles({ tmpdir: config.core.tempDirectory }));
+        } catch (error) {
+          await deletePartial(options.partial.identifier);
+          throw error;
+        }
 
         const response: ApiUploadPartialResponse = {
           files: [],
@@ -113,50 +255,21 @@ export default typedPlugin(
           files: files.map((x) => x.filename),
         });
 
-        if (files.length > 1) throw new ApiError(1005);
+        if (files.length !== 1) {
+          await deletePartial(options.partial.identifier);
+          throw new ApiError(files.length > 1 ? 1005 : 1062);
+        }
         const file = files[0];
         const fileSize = file.file.bytesRead;
 
-        const [start, end, total] = options.partial.range;
-
-        if (start < 0 || end < start || total < 0 || end > total || end - start !== fileSize) {
-          if (options.partial.identifier) await deletePartial(options.partial.identifier);
+        if (end - start !== fileSize) {
+          await deletePartial(options.partial.identifier);
           throw new ApiError(1002);
         }
 
-        if (total > bytes(config.files.maxFileSize)) {
-          if (options.partial.identifier) await deletePartial(options.partial.identifier);
-          throw new ApiError(5001);
-        }
-
-        // caching for partial uploads server side checks and performance
-        if (start === 0) {
-          options.partial.identifier = createPartial(options);
-        } else {
-          if (!options.partial.identifier || !partialsCache.has(options.partial.identifier))
-            throw new ApiError(1003);
-        }
-
-        const cache = partialsCache.get(options.partial.identifier);
-        if (!cache) throw new ApiError(1003);
-
-        // use quota of user if anonymous
-        const quotaUser = req.user
-          ? req.user
-          : folder?.userId
-            ? await prisma.user.findUnique({ where: { id: folder.userId }, select: limitedUserSelect })
-            : null;
-
-        // check quota, using the current added length, and only just adding one file
-        const quotaCheck = await checkQuota(quotaUser, cache.length + fileSize, 1);
-        if (quotaCheck !== true) {
-          await deletePartial(options.partial.identifier);
-          throw new ApiError(5002, typeof quotaCheck === 'string' ? quotaCheck : undefined);
-        }
-
         // file is too large so we delete everything
-        if (cache.length + fileSize > bytes(config.files.maxFileSize)) {
-          await deletePartial(options.partial.identifier!);
+        if (cache.length + fileSize > total) {
+          await deletePartial(options.partial.identifier);
           throw new ApiError(5001);
         }
 
@@ -207,7 +320,7 @@ export default typedPlugin(
 
           const data: Prisma.FileCreateInput = {
             name: `${fileName}${extension}`,
-            size: 0,
+            size: total,
             type: mimetype,
             User: {
               connect: {
@@ -227,9 +340,23 @@ export default typedPlugin(
           }
           if (!req.user && folder) data.anonymous = true;
 
-          const fileUpload = await prisma.file.create({
-            data,
-          });
+          let fileUpload;
+          try {
+            fileUpload = await prisma.$transaction(async (tx) => {
+              if (quotaUser?.quota) {
+                await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${quotaUser.id} FOR UPDATE`;
+
+                const quotaCheck = await checkQuota(quotaUser, total, 1, tx);
+                if (quotaCheck !== true)
+                  throw new ApiError(5002, typeof quotaCheck === 'string' ? quotaCheck : undefined);
+              }
+
+              return tx.file.create({ data });
+            });
+          } catch (error) {
+            await deletePartial(options.partial.identifier);
+            throw error;
+          }
 
           const urlPath =
             options.extensionless && config.files.extensionlessUrls
@@ -257,6 +384,12 @@ export default typedPlugin(
             },
           });
 
+          cache.finalized = true;
+          if (cache.timeout) clearTimeout(cache.timeout);
+          cache.timeout = undefined;
+
+          const partialIdentifier = options.partial.identifier;
+
           worker.on('message', async (msg) => {
             if (msg.type === 'query') {
               let result;
@@ -270,6 +403,10 @@ export default typedPlugin(
                   break;
                 case 'file.update':
                   result = await prisma.file.update(msg.data);
+                  await deletePartial(partialIdentifier, false);
+                  break;
+                case 'file.delete':
+                  result = await prisma.file.delete(msg.data);
                   break;
                 case 'user.findUnique':
                   result = await prisma.user.findUnique(msg.data);
@@ -287,6 +424,15 @@ export default typedPlugin(
             }
           });
 
+          worker.once('exit', () => {
+            void deletePartial(partialIdentifier).catch((error) => {
+              logger.warn('failed to clean up partial upload after worker exit', {
+                identifier: partialIdentifier,
+                error,
+              });
+            });
+          });
+
           response.files.push({
             id: fileUpload.id,
             name: fileUpload.name,
@@ -294,8 +440,6 @@ export default typedPlugin(
             url: responseUrl,
             pending: true,
           });
-
-          await deletePartial(options.partial.identifier, false);
         }
 
         response.partialSuccess = true;
