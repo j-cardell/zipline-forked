@@ -6,10 +6,11 @@ import { config } from '../config';
 import { Config } from '../config/validate';
 import { sanitizeFilename } from '../fs';
 import { formatFileName } from '../uploader/formatFileName';
-import { guess } from '../mimes';
+import { guess, normalizeMimetype } from '../mimes';
 import { log } from '../logger';
 import { randomCharacters } from '../random';
 import { readFileSync } from 'fs';
+import { ApiError } from './errors';
 
 const codeMap: { ext: string; mime: string; name: string }[] = JSON.parse(
   readFileSync('./code.json', 'utf8'),
@@ -85,15 +86,18 @@ export async function getFilename(
   extension: string,
   override?: string,
   reservedNames?: Set<string>,
-): Promise<{ error: string } | { fileName: string }> {
+  alternateExtensions: string[] = [],
+): Promise<string> {
   try {
     let fileName = override ? sanitizeFilename(override) : formatFileName(format, originalName);
 
-    if (!fileName) return { error: 'invalid file name' };
+    if (!fileName) throw 'invalid file name';
 
-    let fullFileName = `${fileName}${extension}`;
+    const extensions = [...new Set([extension, ...alternateExtensions])];
+    let fullFileNames = extensions.map((ext) => `${fileName}${ext}`);
     let existing =
-      reservedNames?.has(fullFileName) || (await prisma.file.findFirst({ where: { name: fullFileName } }));
+      fullFileNames.some((name) => reservedNames?.has(name)) ||
+      (await prisma.file.findFirst({ where: { name: { in: fullFileNames } } }));
 
     if (existing && (override || format === 'name')) {
       let collisionRetries = 0;
@@ -103,51 +107,73 @@ export async function getFilename(
       while (existing && collisionRetries < maxRetries) {
         const suffix = randomCharacters(4).toLowerCase();
         fileName = `${baseName}-${suffix}`;
-        fullFileName = `${fileName}${extension}`;
-        existing = await prisma.file.findFirst({ where: { name: fullFileName } });
+        fullFileNames = [`${fileName}${extension}`];
+        existing = await prisma.file.findFirst({ where: { name: { in: fullFileNames } } });
         collisionRetries++;
       }
 
-      if (existing) return { error: 'file with the same name already exists' };
+      if (existing) throw 'file with the same name already exists';
     }
 
     let dateIncrement = 1;
 
     while (existing && (format === 'random' || format === 'date')) {
       fileName = formatFileName(format, originalName, dateIncrement++);
-      if (!fileName) return { error: 'invalid file name' };
+      if (!fileName) throw 'invalid file name';
 
-      fullFileName = `${fileName}${extension}`;
+      fullFileNames = extensions.map((ext) => `${fileName}${ext}`);
       existing =
-        reservedNames?.has(fullFileName) || (await prisma.file.findFirst({ where: { name: fullFileName } }));
+        fullFileNames.some((name) => reservedNames?.has(name)) ||
+        (await prisma.file.findFirst({ where: { name: { in: fullFileNames } } }));
     }
 
-    reservedNames?.add(fullFileName);
-    return { fileName };
+    for (const name of fullFileNames) reservedNames?.add(name);
+    return fileName;
   } catch (e) {
     logger.warn(`error generating file name: ${e}`);
 
-    return {
-      error: e instanceof URIError ? 'invalid file name: make sure it is URL encoded' : 'invalid file name',
-    };
+    if (typeof e === 'string') throw e;
+    throw e instanceof URIError ? 'invalid file name: make sure it is URL encoded' : 'invalid file name';
   }
 }
 
-export async function getMimetype(
-  originalMimetype: string,
+export function enforceMimetypePolicy(
+  mimetype: string,
+  context?: string,
+): { mimetype: string; remapped: boolean } {
+  const normalized = normalizeMimetype(mimetype) ?? 'application/octet-stream';
+  const disabledTypes = new Set(
+    config.files.disabledTypes
+      .map((type) => normalizeMimetype(type))
+      .filter((type): type is string => type !== null),
+  );
+
+  if (!disabledTypes.has(normalized)) return { mimetype: normalized, remapped: false };
+
+  const defaultType = normalizeMimetype(config.files.disabledTypesDefault);
+  if (defaultType && !disabledTypes.has(defaultType)) return { mimetype: defaultType, remapped: true };
+
+  throw new ApiError(1065, `${context ? `${context}: ` : ''}File type ${normalized} is not allowed`);
+}
+
+export async function resolveUploadMimetype(
+  originalMimetype: string | null | undefined,
   extension: string,
-): Promise<{ mimetype: string; assumed: boolean }> {
+  context?: string,
+): Promise<{ mimetype: string; assumed: boolean; remapped: boolean }> {
   const ext = extension.startsWith('.') ? extension.substring(1) : extension;
 
   const codeEntry = codeMap.find((meta) => meta.ext === ext);
   if (codeEntry) {
-    return { mimetype: codeEntry.mime, assumed: true };
+    const enforced = enforceMimetypePolicy(codeEntry.mime, context);
+    return { ...enforced, assumed: true };
   }
 
-  if (config.files.assumeMimetypes) {
-    const mime = await guess(ext);
-    if (mime) return { mimetype: mime, assumed: true };
-  }
+  const declaredMimetype = normalizeMimetype(originalMimetype) ?? 'application/octet-stream';
+  const assumedMimetype = config.files.assumeMimetypes ? normalizeMimetype(await guess(ext)) : null;
+  const assumed = assumedMimetype !== null;
+  const resolvedMimetype = assumedMimetype ?? declaredMimetype;
+  const enforced = enforceMimetypePolicy(resolvedMimetype, context);
 
-  return { mimetype: originalMimetype, assumed: false };
+  return { ...enforced, assumed };
 }

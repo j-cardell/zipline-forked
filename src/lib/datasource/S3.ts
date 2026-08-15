@@ -6,7 +6,6 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  ListObjectsCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -440,6 +439,25 @@ export class S3Datasource extends Datasource {
         throw new Error('Failed to complete multipart upload');
       }
 
+      const deleteCommand = new DeleteObjectCommand({
+        Bucket: this.options.bucket,
+        Key: this.key(from),
+      });
+
+      try {
+        const deleteRes = await this.client.send(deleteCommand);
+        if (!isOk(deleteRes.$metadata.httpStatusCode || 0)) {
+          this.logger.error('there was an error while deleting old object');
+          this.logger.error('error metadata', deleteRes.$metadata as Record<string, unknown>);
+          throw new Error('Failed to delete old object');
+        }
+      } catch (e) {
+        this.logger.error('there was an error while deleting old object');
+        this.logger.error('error metadata', e as Record<string, unknown>);
+
+        throw new Error('Failed to delete old object');
+      }
+
       return;
     }
 
@@ -477,30 +495,39 @@ export class S3Datasource extends Datasource {
   }
 
   public async list(options: ListOptions = { prefix: '' }): Promise<string[]> {
-    const command = new ListObjectsCommand({
-      Bucket: this.options.bucket,
-      Prefix: this.key(options.prefix || ''),
-      Delimiter: this.options.subdirectory ? undefined : '/',
-    });
+    const files: string[] = [];
+    let continuationToken: string | undefined;
 
     try {
-      const res = await this.client.send(command);
+      do {
+        const res = await this.client.send(
+          new ListObjectsV2Command({
+            Bucket: this.options.bucket,
+            Prefix: this.key(options.prefix || ''),
+            Delimiter: this.options.subdirectory ? undefined : '/',
+            ContinuationToken: continuationToken,
+          }),
+        );
 
-      if (!isOk(res.$metadata.httpStatusCode || 0)) {
-        this.logger.error('there was an error while listing objects');
-        this.logger.error('error metadata', res.$metadata as Record<string, unknown>);
+        if (!isOk(res.$metadata.httpStatusCode || 0)) {
+          this.logger.error('there was an error while listing objects');
+          this.logger.error('error metadata', res.$metadata as Record<string, unknown>);
 
-        return [];
-      }
+          return [];
+        }
 
-      return (
-        res.Contents?.map((obj) => {
+        for (const obj of res.Contents ?? []) {
           if (this.options.subdirectory) {
-            return obj.Key!.replace(this.options.subdirectory + '/', '');
+            files.push(obj.Key!.replace(this.options.subdirectory + '/', ''));
+          } else {
+            files.push(obj.Key!);
           }
-          return obj.Key!;
-        }) ?? []
-      );
+        }
+
+        continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+      } while (continuationToken);
+
+      return files;
     } catch (e) {
       this.logger.error('there was an error while listing objects');
       this.logger.error('error metadata', e as Record<string, unknown>);

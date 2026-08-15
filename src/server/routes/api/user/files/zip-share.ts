@@ -99,8 +99,12 @@ export default typedPlugin(
           });
         }
 
-        const nameResult = await getFilename(config.files.defaultFormat, zipName, '.zip');
-        if ('error' in nameResult) throw new ApiError(1009, nameResult.error);
+        let zipFileName: string;
+        try {
+          zipFileName = await getFilename(config.files.defaultFormat, zipName, '.zip');
+        } catch (e) {
+          throw new ApiError(1009, typeof e === 'string' ? e : 'invalid file name');
+        }
 
         const zip = archiver('zip', { zlib: { level: 6 } });
         const zipBufferPromise = buffer(zip);
@@ -137,7 +141,7 @@ export default typedPlugin(
 
         const zipFile = await prisma.file.create({
           data: {
-            name: `${nameResult.fileName}.zip`,
+            name: `${zipFileName}.zip`,
             size: zipBuffer.length,
             type: 'application/zip',
             User: { connect: { id: req.user.id } },
