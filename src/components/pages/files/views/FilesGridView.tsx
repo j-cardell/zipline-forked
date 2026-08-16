@@ -92,6 +92,14 @@ export default forwardRef<
     }),
   });
 
+  const refresh = useCallback(() => {
+    if (infinite) {
+      infiniteQuery.mutate();
+    } else {
+      paginationQuery.mutate();
+    }
+  }, [infinite, infiniteQuery, paginationQuery]);
+
   useImperativeHandle(ref, () => ({
     refresh,
   }));
@@ -103,14 +111,6 @@ export default forwardRef<
       setPage(1);
     }
   }, [search, folderId, perpage, infinite, setPage]);
-
-  const refresh = useCallback(() => {
-    if (infinite) {
-      infiniteQuery.mutate();
-    } else {
-      paginationQuery.mutate();
-    }
-  }, [infinite, infiniteQuery, paginationQuery]);
 
   const data = infinite ? infiniteQuery.data : ((paginationQuery.data?.page as File[] | undefined) ?? []);
   const isLoading = infinite ? infiniteQuery.isLoading : paginationQuery.isLoading;
@@ -138,10 +138,6 @@ export default forwardRef<
 
   const selectedFiles = useMemo(() => data.filter((file) => selectedIds.has(file.id)), [data, selectedIds]);
 
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [search, folderId, page, infinite]);
-
   const handleSelect = useCallback(
     (fileId: string) => {
       setSelectedIds((prev) => {
@@ -155,6 +151,22 @@ export default forwardRef<
   );
 
   const handleClear = useCallback(() => setSelectedIds(new Set()), []);
+
+  const handleSetPage = useCallback(
+    (value: number) => {
+      setSelectedIds(new Set());
+      setPage(value);
+    },
+    [setPage],
+  );
+
+  const handleSetPerpage = useCallback(
+    (value: number) => {
+      setSelectedIds(new Set());
+      setPerpage(value);
+    },
+    [setPerpage],
+  );
 
   const handleMove = useCallback(() => {
     const modalId = modals.open({
@@ -272,7 +284,6 @@ export default forwardRef<
             <Text size='sm' fw={600}>
               {selectedIds.size} selected
             </Text>
-
             <Group gap='xs'>
               <Button
                 size='compact-sm'
@@ -444,8 +455,8 @@ export default forwardRef<
               value={perpage.toString()}
               data={PER_PAGE_OPTIONS.map((val) => ({ value: val.toString(), label: `${val}` }))}
               onChange={(value) => {
-                setPerpage(Number(value));
-                setPage(1);
+                handleSetPerpage(Number(value));
+                handleSetPage(1);
               }}
               w={80}
               size='xs'
@@ -454,7 +465,7 @@ export default forwardRef<
 
             <Pagination
               value={page}
-              onChange={setPage}
+              onChange={handleSetPage}
               total={cachedPages}
               size='sm'
               withControls

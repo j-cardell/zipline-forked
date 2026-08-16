@@ -2,7 +2,7 @@
   "name": "zipline",
   "private": true,
   "license": "MIT",
-  "version": "4.6.5",
+  "version": "4.7.0",
   "type": "module",
   "scripts": {
     "build": "tsx scripts/build.ts",
@@ -11,7 +11,7 @@
     "dev:inspector": "cross-env NODE_ENV=development DEBUG=zipline tsx --import ./src/dotenv.js --inspect=0.0.0.0:9229 --enable-source-maps ./src/server",
     "start": "cross-env NODE_ENV=production node --trace-warnings --import ./src/dotenv.js ./build/server/index.js",
     "start:inspector": "cross-env NODE_ENV=production node --import ./src/dotenv.js --inspect=0.0.0.0:9229 --enable-source-maps ./build/server/index.js",
-    "ctl": "NODE_ENV=production node --import ./src/dotenv.js --enable-source-maps ./build/ctl/index.js",
+    "ctl": "cross-env NODE_ENV=production node --import ./src/dotenv.js --enable-source-maps ./build/ctl/index.js",
     "validate": "tsx scripts/validate.ts",
     "openapi": "tsx scripts/openapi.ts",
     "db:prototype": "prisma db push --skip-generate && prisma generate --no-hints",
@@ -98,32 +98,19 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
-    "eslint": "^10.6.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-jsx-a11y": "^6.10.2",
-    "eslint-plugin-prettier": "^5.5.6",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "eslint-plugin-unused-imports": "^4.3.0",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
     "postcss": "^8.5.16",
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",
-    "prettier": "^3.9.4",
     "sass": "^1.101.0",
-    "tsc-alias": "^1.8.17",
+    "tsc-alias": "^1.9.1",
     "tsup": "^8.5.1",
-    "tsx": "^4.23.0",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.1"
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee",
-  "prettier": {
-    "singleQuote": true,
-    "jsxSingleQuote": true,
-    "printWidth": 110
-  }
+  "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee"
 }

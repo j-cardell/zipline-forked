@@ -59,7 +59,7 @@ export default function FavoriteFiles() {
               <Paper withBorder h={skeletonHeight}>
                 <LoadingOverlay visible />
               </Paper>
-            ) : (data?.page.length ?? 0 > 0) ? (
+            ) : (data?.page.length ?? 0) > 0 ? (
               data?.page.map((file) => (
                 <Suspense fallback={<Skeleton height={skeletonHeight} animate />} key={file.id}>
                   <DashboardFile file={file} compact={gridSize === 'compact'} />

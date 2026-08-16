@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/.pnpm-store
 /.pnp
 .pnp.js
 
@@ -35,9 +36,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-
-# eslint
-.eslintcache
 
 # nix dev env
 !.envrc

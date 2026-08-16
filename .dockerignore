@@ -1,7 +1,15 @@
+.git
 .github
+.devenv
+.direnv
+.pnpm-store
 build
 node_modules
 uploads*
-.env
-.eslintcache
+.env*
+.memory.log*
+*.crt
+*.key
+*.tsbuildinfo
+openapi.json
 src/prisma
