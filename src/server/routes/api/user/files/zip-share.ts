@@ -3,14 +3,15 @@ import { checkQuota, getDomain, getFilename } from '@/lib/api/upload';
 import { config } from '@/lib/config';
 import { hashPassword } from '@/lib/crypto';
 import { datasource } from '@/lib/datasource';
-import { prisma } from '@/lib/db';
-import { fileSelect } from '@/lib/db/models/file';
+import { db } from '@/lib/db';
+import { files, folders, urls } from '@/lib/db/schema';
 import { log } from '@/lib/logger';
 import { randomCharacters } from '@/lib/random';
 import { formatRootUrl } from '@/lib/url';
 import { userMiddleware } from '@/server/middleware/user';
 import typedPlugin from '@/server/typedPlugin';
 import archiver from 'archiver';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { buffer } from 'node:stream/consumers';
 import z from 'zod';
 
@@ -63,40 +64,37 @@ export default typedPlugin(
       async (req, res) => {
         const { files: fileIds, zipName } = req.body;
 
-        const existingFiles = await prisma.file.findMany({
-          where: {
-            id: { in: fileIds },
-            userId: req.user.id,
-          },
-        });
+        const existingFiles = await db
+          .select()
+          .from(files)
+          .where(and(inArray(files.id, fileIds), eq(files.userId, req.user.id)));
 
         if (existingFiles.length === 0) throw new ApiError(1026);
         if (existingFiles.length !== fileIds.length) {
           throw new ApiError(3014, "You don't have permission to zip some of the selected files");
         }
 
-        const totalSize = existingFiles.reduce((acc, file) => acc + Number(file.size), 0);
+        const totalSize = existingFiles.reduce((acc: number, file: { size: number | string | bigint }) => {
+          const n = typeof file.size === 'bigint' ? Number(file.size) : Number(file.size);
+          return acc + n;
+        }, 0);
         const quotaCheck = await checkQuota(req.user, totalSize, 1);
         if (quotaCheck !== true)
           throw new ApiError(5002, typeof quotaCheck === 'string' ? quotaCheck : undefined);
 
         const folderName = 'zip shares';
-        let folder = await prisma.folder.findFirst({
-          where: {
-            name: folderName,
-            userId: req.user.id,
-            parentId: null,
-          },
-        });
+        let [folder] = await db
+          .select()
+          .from(folders)
+          .where(and(eq(folders.name, folderName), eq(folders.userId, req.user.id), isNull(folders.parentId)))
+          .limit(1);
 
         if (!folder) {
-          folder = await prisma.folder.create({
-            data: {
-              name: folderName,
-              userId: req.user.id,
-              public: false,
-            },
-          });
+          const [created] = await db
+            .insert(folders)
+            .values({ name: folderName, userId: req.user.id, public: false })
+            .returning();
+          folder = created;
         }
 
         let zipFileName: string;
@@ -139,16 +137,16 @@ export default typedPlugin(
 
         if (zipBuffer.length === 0) throw new ApiError(1062, 'Zip archive is empty');
 
-        const zipFile = await prisma.file.create({
-          data: {
+        const [zipFile] = await db
+          .insert(files)
+          .values({
             name: `${zipFileName}.zip`,
             size: zipBuffer.length,
             type: 'application/zip',
-            User: { connect: { id: req.user.id } },
-            Folder: { connect: { id: folder.id } },
-          },
-          select: fileSelect,
-        });
+            userId: req.user.id,
+            folderId: folder.id,
+          })
+          .returning();
 
         await datasource.put(zipFile.name, zipBuffer, { mimetype: 'application/zip' });
 
@@ -158,10 +156,11 @@ export default typedPlugin(
           req.headers.host,
         )}${formatRootUrl(config.files.route, zipFile.name)}`;
 
-        let code, existingCode;
+        let code: string;
+        let existingCode: { id: string } | undefined;
         do {
           code = randomCharacters(config.urls.length);
-          existingCode = await prisma.url.findFirst({ where: { code } });
+          [existingCode] = await db.select({ id: urls.id }).from(urls).where(eq(urls.code, code)).limit(1);
         } while (existingCode);
 
         const maxViews = req.headers['x-zipline-max-views'];
@@ -169,18 +168,16 @@ export default typedPlugin(
           ? await hashPassword(req.headers['x-zipline-password'])
           : undefined;
 
-        const url = await prisma.url.create({
-          data: {
+        const [url] = await db
+          .insert(urls)
+          .values({
             userId: req.user.id,
             destination: fileUrl,
             code,
             ...(maxViews && { maxViews }),
             ...(password && { password }),
-          },
-          omit: {
-            password: true,
-          },
-        });
+          })
+          .returning({ id: urls.id, code: urls.code, vanity: urls.vanity });
 
         const responseUrl = `${getDomain(
           req.headers['x-zipline-domain'] as string | undefined,

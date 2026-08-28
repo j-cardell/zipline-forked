@@ -1,17 +1,20 @@
 import { verifyAccessToken } from '@/lib/accessToken';
+import { setContentSecurity } from '@/lib/api/contentSecurity';
 import { ApiError } from '@/lib/api/errors';
 import { parseRange } from '@/lib/api/range';
 import { config } from '@/lib/config';
 import { datasource } from '@/lib/datasource';
-import { findFileByName } from '@/lib/db/models/file';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
+import { removeFile } from '@/lib/db/models/file';
+import { files } from '@/lib/db/schema';
+import { escapeLike } from '@/lib/db/utils';
 import { sanitizeFilename } from '@/lib/fs';
 import { log } from '@/lib/logger';
 import { guess } from '@/lib/mimes';
-import { setContentSecurity } from '@/lib/api/contentSecurity';
 import { TimedCache } from '@/lib/timedCache';
 import typedPlugin from '@/server/typedPlugin';
 import { verifyFileAccess } from '@/server/middleware/fileAccess';
+import { desc, eq, like, sql } from 'drizzle-orm';
 import { FastifyReply, FastifyRequest } from 'fastify';
 
 const VIEW_WINDOW = 5 * 1000;
@@ -46,13 +49,8 @@ export const rawFileHandler = async (
   if (!idSanitized) return res.callNotFound();
 
   if (id.startsWith('.thumbnail')) {
-    const thumbnail = await prisma.thumbnail.findFirst({
-      where: {
-        path: idSanitized,
-        file: {
-          password: null,
-        },
-      },
+    const thumbnail = await db.query.thumbnails.findFirst({
+      where: { path: idSanitized, file: { password: { isNull: true } } },
     });
 
     if (!thumbnail) return res.callNotFound();
@@ -72,22 +70,30 @@ export const rawFileHandler = async (
       .send(buf);
   }
 
-  const file = await findFileByName(idSanitized, (where, orderBy) =>
-    prisma.file.findFirst({ where, ...(orderBy && { orderBy }) }),
-  );
+  const [fileReq] = await db.select().from(files).where(eq(files.name, idSanitized)).limit(1);
+  let file = fileReq;
+  if (!file && config.files.extensionlessUrls && !idSanitized.includes('.')) {
+    const [fileReq] = await db
+      .select()
+      .from(files)
+      .where(like(files.name, `${escapeLike(idSanitized)}.%`))
+      .orderBy(desc(files.createdAt))
+      .limit(1);
+    file = fileReq;
+  }
   if (!file) return res.callNotFound();
 
-  const access = await verifyFileAccess(req, res, file);
+  const access = await verifyFileAccess(req, res, {
+    id: file.id,
+    userId: file.userId ?? null,
+    password: file.password,
+  });
   if (!access.allowed) return res.callNotFound();
 
   if (file?.deletesAt && file.deletesAt <= new Date()) {
     try {
       await datasource.delete(file.name);
-      await prisma.file.delete({
-        where: {
-          id: file.id,
-        },
-      });
+      await removeFile(file.id);
     } catch (e) {
       logger.error('failed to delete file on expiration', { id: file.id }).error(e as Error);
     }
@@ -115,9 +121,7 @@ export const rawFileHandler = async (
     if (config.features.deleteOnMaxViews) {
       try {
         await datasource.delete(file.name);
-        await prisma.file.delete({
-          where: { id: file.id },
-        });
+        await removeFile(file.id);
       } catch (e) {
         logger.error('failed to delete file on max views', { id: file.id }).error(e as Error);
       }
@@ -130,10 +134,10 @@ export const rawFileHandler = async (
     viewsCache.set(key, now);
 
     try {
-      await prisma.file.update({
-        where: { id: file.id },
-        data: { views: { increment: 1 } },
-      });
+      await db
+        .update(files)
+        .set({ views: sql`${files.views} + 1` })
+        .where(eq(files.id, file.id));
     } catch (e) {
       logger.error('failed to increment view counter', { id: file.id }).error(e as Error);
     }

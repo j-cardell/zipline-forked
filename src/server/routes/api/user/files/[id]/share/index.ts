@@ -1,13 +1,15 @@
 import { ApiError } from '@/lib/api/errors';
 import { config } from '@/lib/config';
 import { hashPassword } from '@/lib/crypto';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
+import { files, fileShares, users } from '@/lib/db/schema';
 import { log } from '@/lib/logger';
-import { canInteract } from '@/lib/role';
 import { randomCharacters } from '@/lib/random';
+import { canInteract } from '@/lib/role';
 import { formatRootUrl } from '@/lib/url';
 import { userMiddleware } from '@/server/middleware/user';
 import typedPlugin from '@/server/typedPlugin';
+import { eq, or, desc } from 'drizzle-orm';
 import z from 'zod';
 
 export type ApiUserFilesIdShareResponse = {
@@ -24,6 +26,15 @@ export type ApiUserFilesIdShareResponse = {
 
 const logger = log('api').c('user').c('files').c('[id]').c('share');
 
+const shareOutputSchema = z.object({
+  id: z.string(),
+  token: z.string(),
+  expiresAt: z.union([z.date(), z.string()]).nullable(),
+  maxViews: z.number().nullable(),
+  views: z.number(),
+  createdAt: z.union([z.date(), z.string()]),
+});
+
 export const PATH = '/api/user/files/:id/share';
 export default typedPlugin(
   async (server) => {
@@ -35,16 +46,7 @@ export default typedPlugin(
           params: z.object({ id: z.string() }),
           response: {
             200: z.object({
-              shares: z.array(
-                z.object({
-                  id: z.string(),
-                  token: z.string(),
-                  expiresAt: z.union([z.date(), z.string()]).nullable(),
-                  maxViews: z.number().nullable(),
-                  views: z.number(),
-                  createdAt: z.union([z.date(), z.string()]),
-                }),
-              ),
+              shares: z.array(shareOutputSchema),
             }),
           },
           tags: ['auth'],
@@ -52,19 +54,29 @@ export default typedPlugin(
         preHandler: [userMiddleware],
       },
       async (req, res) => {
-        const file = await prisma.file.findFirst({
-          where: { OR: [{ id: req.params.id }, { name: req.params.id }] },
-          include: { User: true },
-        });
+        const [file] = await db
+          .select()
+          .from(files)
+          .leftJoin(users, eq(users.id, files.userId))
+          .where(or(eq(files.id, req.params.id), eq(files.name, req.params.id)))
+          .limit(1);
+
         if (!file) throw new ApiError(4000);
-        if (file.userId !== req.user.id && !canInteract(req.user.role, file.User?.role ?? 'USER'))
+        if (file.File.userId !== req.user.id && !canInteract(req.user.role, file.User?.role ?? 'USER'))
           throw new ApiError(4000);
 
-        const shares = await prisma.fileShare.findMany({
-          where: { fileId: file.id },
-          orderBy: { createdAt: 'desc' },
-          omit: { password: true },
-        });
+        const shares = await db
+          .select({
+            id: fileShares.id,
+            token: fileShares.token,
+            expiresAt: fileShares.expiresAt,
+            maxViews: fileShares.maxViews,
+            views: fileShares.views,
+            createdAt: fileShares.createdAt,
+          })
+          .from(fileShares)
+          .where(eq(fileShares.fileId, file.File.id))
+          .orderBy(desc(fileShares.createdAt));
 
         return res.send({ shares });
       },
@@ -85,14 +97,7 @@ export default typedPlugin(
             .optional(),
           response: {
             200: z.object({
-              share: z.object({
-                id: z.string(),
-                token: z.string(),
-                expiresAt: z.union([z.date(), z.string()]).nullable(),
-                maxViews: z.number().nullable(),
-                views: z.number(),
-                createdAt: z.union([z.date(), z.string()]),
-              }),
+              share: shareOutputSchema,
               url: z.string(),
             }),
           },
@@ -101,42 +106,56 @@ export default typedPlugin(
         preHandler: [userMiddleware],
       },
       async (req, res) => {
-        const file = await prisma.file.findFirst({
-          where: { OR: [{ id: req.params.id }, { name: req.params.id }] },
-          include: { User: true },
-        });
+        const [file] = await db
+          .select()
+          .from(files)
+          .leftJoin(users, eq(users.id, files.userId))
+          .where(or(eq(files.id, req.params.id), eq(files.name, req.params.id)))
+          .limit(1);
+
         if (!file) throw new ApiError(4000);
-        if (file.userId !== req.user.id && !canInteract(req.user.role, file.User?.role ?? 'USER'))
+        if (file.File.userId !== req.user.id && !canInteract(req.user.role, file.User?.role ?? 'USER'))
           throw new ApiError(4000);
 
         const { expiresAt, maxViews, password } = req.body ?? {};
 
         let token: string;
-        let existing: { id: string } | null;
+        let existing: { id: string } | undefined;
         do {
           token = randomCharacters(24);
-          existing = await prisma.fileShare.findFirst({ where: { token } });
+          [existing] = await db
+            .select({ id: fileShares.id })
+            .from(fileShares)
+            .where(eq(fileShares.token, token))
+            .limit(1);
         } while (existing);
 
         const parsedExpiresAt =
           expiresAt === undefined || expiresAt === null ? undefined : new Date(expiresAt);
 
-        const share = await prisma.fileShare.create({
-          data: {
+        const [share] = await db
+          .insert(fileShares)
+          .values({
             token,
-            fileId: file.id,
+            fileId: file.File.id,
             ...(parsedExpiresAt && { expiresAt: parsedExpiresAt }),
             ...(maxViews !== undefined && { maxViews }),
             ...(password && { password: await hashPassword(password) }),
-          },
-          omit: { password: true },
-        });
+          })
+          .returning({
+            id: fileShares.id,
+            token: fileShares.token,
+            expiresAt: fileShares.expiresAt,
+            maxViews: fileShares.maxViews,
+            views: fileShares.views,
+            createdAt: fileShares.createdAt,
+          });
 
         const host = `${config.core.returnHttpsUrls ? 'https' : 'http'}://${req.headers.host ?? 'localhost'}`;
-        const url = `${host}${formatRootUrl(config.files.route, file.name)}?share=${encodeURIComponent(token)}`;
+        const url = `${host}${formatRootUrl(config.files.route, file.File.name)}?share=${encodeURIComponent(token)}`;
 
-        logger.info(`${req.user.username} created share for file ${file.name}`, {
-          file: file.id,
+        logger.info(`${req.user.username} created share for file ${file.File.name}`, {
+          file: file.File.id,
           share: share.id,
         });
 

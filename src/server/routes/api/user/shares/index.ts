@@ -1,6 +1,8 @@
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
+import { files, fileShares, thumbnails } from '@/lib/db/schema';
 import { userMiddleware } from '@/server/middleware/user';
 import typedPlugin from '@/server/typedPlugin';
+import { desc, eq } from 'drizzle-orm';
 import z from 'zod';
 
 export type ApiUserSharesResponse = {
@@ -55,31 +57,40 @@ export default typedPlugin(
         preHandler: [userMiddleware],
       },
       async (req) => {
-        const shares = await prisma.fileShare.findMany({
-          where: {
-            file: {
-              userId: req.user.id,
+        const rows = await db
+          .select({
+            share: {
+              id: fileShares.id,
+              token: fileShares.token,
+              expiresAt: fileShares.expiresAt,
+              maxViews: fileShares.maxViews,
+              views: fileShares.views,
+              createdAt: fileShares.createdAt,
             },
-          },
-          include: {
             file: {
-              select: {
-                id: true,
-                name: true,
-                type: true,
-                size: true,
-                thumbnail: {
-                  select: {
-                    path: true,
-                  },
-                },
-              },
+              id: files.id,
+              name: files.name,
+              type: files.type,
+              size: files.size,
+              thumbnailPath: thumbnails.path,
             },
+          })
+          .from(fileShares)
+          .innerJoin(files, eq(files.id, fileShares.fileId))
+          .leftJoin(thumbnails, eq(thumbnails.fileId, files.id))
+          .where(eq(files.userId, req.user.id))
+          .orderBy(desc(fileShares.createdAt));
+
+        const shares = rows.map((row) => ({
+          ...row.share,
+          file: {
+            id: row.file.id,
+            name: row.file.name,
+            type: row.file.type,
+            size: row.file.size,
+            thumbnail: row.file.thumbnailPath ? { path: row.file.thumbnailPath } : null,
           },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
+        }));
 
         return { shares };
       },

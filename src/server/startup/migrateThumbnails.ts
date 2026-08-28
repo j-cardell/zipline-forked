@@ -1,7 +1,9 @@
 import { datasource } from '@/lib/datasource';
 import { LocalDatasource } from '@/lib/datasource/Local';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
+import { thumbnails } from '@/lib/db/schema';
 import { log } from '@/lib/logger';
+import { eq, like } from 'drizzle-orm';
 import { mkdir, readdir, rename, rm } from 'fs/promises';
 import { join } from 'path';
 
@@ -48,17 +50,14 @@ export async function migrateThumbnailsToSubfolder() {
   }
 
   // DB paths remain flat (.thumbnail.<id>.<format>); LocalDatasource resolves them to .thumbnails/.
-  const dbThumbnails = await prisma.thumbnail.findMany({
-    select: { id: true, path: true },
-  });
-  const normalizedPaths = dbThumbnails.filter((t) => t.path.startsWith('.thumbnails/'));
+  const dbThumbnails = await db
+    .select({ id: thumbnails.id, path: thumbnails.path })
+    .from(thumbnails)
+    .where(like(thumbnails.path, '.thumbnails/%'));
 
-  for (const thumb of normalizedPaths) {
+  for (const thumb of dbThumbnails) {
     const flatPath = thumb.path.replace('.thumbnails/', '');
-    await prisma.thumbnail.update({
-      where: { id: thumb.id },
-      data: { path: flatPath },
-    });
+    await db.update(thumbnails).set({ path: flatPath }).where(eq(thumbnails.id, thumb.id));
     logger.debug('normalized thumbnail path', { id: thumb.id, from: thumb.path, to: flatPath });
   }
 
