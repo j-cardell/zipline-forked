@@ -48,3 +48,4 @@ uploads*/
 *.key
 .memory.log*
 openapi.json
+/backups

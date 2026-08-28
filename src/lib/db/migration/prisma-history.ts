@@ -59,6 +59,10 @@ const expectedPrismaMigrations = [
     '20260724223042_add_file_user_id_index',
     '55eac6d144cd0db0c2276f7096efa49c35afa3fc153443f915b0887e86a6f169',
   ],
+  [
+    '20260725220856_private_files_share_links',
+    '086b62e619e811c1082dd9a4198d603c7f610ef904b003d4840009e69d3c1952',
+  ],
   ['20260806081144_remove_version_api', '08368d44344f934f07757dc014bd3a2022b14a8b377e1f8f5fb2d4836c3dc1ce'],
 ] as const;
 
