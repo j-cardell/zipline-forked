@@ -1,8 +1,9 @@
 import { config } from '@/lib/config';
 import { verifyPassword, hashPassword } from '@/lib/crypto';
-import { prisma } from '@/lib/db';
-import { File } from '@/prisma/client';
+import { db } from '@/lib/db';
+import { fileShares, userSessions, users } from '@/lib/db/schema';
 import { FastifyReply, FastifyRequest } from 'fastify';
+import { eq, sql } from 'drizzle-orm';
 import { getSession } from '../session';
 import { parseUserToken } from './user';
 
@@ -15,6 +16,12 @@ export type FileAccessResult =
     }
   | { allowed: false };
 
+type FileAccessInput = {
+  id: string;
+  userId: string | null;
+  password: string | null;
+};
+
 async function getAuthenticatedUserId(req: FastifyRequest, res: FastifyReply): Promise<string | null> {
   const authorization = req.headers.authorization;
 
@@ -22,10 +29,7 @@ async function getAuthenticatedUserId(req: FastifyRequest, res: FastifyReply): P
     const token = parseUserToken(authorization, true);
     if (!token) return null;
 
-    const user = await prisma.user.findFirst({
-      where: { token },
-      select: { id: true },
-    });
+    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.token, token)).limit(1);
 
     return user?.id ?? null;
   }
@@ -33,14 +37,12 @@ async function getAuthenticatedUserId(req: FastifyRequest, res: FastifyReply): P
   const session = await getSession(req, res);
   if (session.tokenAuth || !session.id || !session.sessionId) return null;
 
-  const user = await prisma.user.findFirst({
-    where: {
-      sessions: {
-        some: { id: session.sessionId },
-      },
-    },
-    select: { id: true },
-  });
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .innerJoin(userSessions, eq(userSessions.userId, users.id))
+    .where(eq(userSessions.id, session.sessionId))
+    .limit(1);
 
   return user?.id ?? null;
 }
@@ -48,7 +50,7 @@ async function getAuthenticatedUserId(req: FastifyRequest, res: FastifyReply): P
 export async function verifyFileAccess(
   req: FastifyRequest,
   res: FastifyReply,
-  file: Pick<File, 'id' | 'userId' | 'password'>,
+  file: Pick<FileAccessInput, 'id' | 'userId' | 'password'>,
 ): Promise<FileAccessResult> {
   const privateByDefault = config.features.filesPrivateByDefault;
 
@@ -59,11 +61,9 @@ export async function verifyFileAccess(
 
   const shareToken = (req.query as any)?.share;
   if (shareToken && typeof shareToken === 'string') {
-    const share = await prisma.fileShare.findFirst({
-      where: { token: shareToken, fileId: file.id },
-    });
+    const [share] = await db.select().from(fileShares).where(eq(fileShares.token, shareToken)).limit(1);
 
-    if (!share) return { allowed: false };
+    if (!share || share.fileId !== file.id) return { allowed: false };
 
     if (share.expiresAt && share.expiresAt <= new Date()) return { allowed: false };
     if (share.maxViews && share.views >= share.maxViews) return { allowed: false };
@@ -75,10 +75,10 @@ export async function verifyFileAccess(
       }
     }
 
-    await prisma.fileShare.update({
-      where: { id: share.id },
-      data: { views: { increment: 1 } },
-    });
+    await db
+      .update(fileShares)
+      .set({ views: sql`${fileShares.views} + 1` })
+      .where(eq(fileShares.id, share.id));
 
     return { allowed: true, share: { id: share.id, token: share.token }, needsFilePassword: !!file.password };
   }
@@ -98,7 +98,7 @@ export async function verifyFileAccess(
 export async function canAccessFileAsOwner(
   req: FastifyRequest,
   res: FastifyReply,
-  file: Pick<File, 'id' | 'userId'>,
+  file: Pick<FileAccessInput, 'id' | 'userId'>,
 ): Promise<boolean> {
   const requestingUserId = await getAuthenticatedUserId(req, res);
   return !!requestingUserId && requestingUserId === file.userId;

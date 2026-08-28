@@ -1,8 +1,11 @@
 import { bytes } from '@/lib/bytes';
 import { config, reloadSettings } from '@/lib/config';
 import { getDatasource } from '@/lib/datasource';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
+import { getOwnedFolder } from '@/lib/db/models/folder';
+import { files, users } from '@/lib/db/schema';
 import { guess } from '@/lib/mimes';
+import { eq } from 'drizzle-orm';
 import { statSync } from 'fs';
 import { mkdir, readdir, rm } from 'fs/promises';
 import { join, parse, resolve } from 'path';
@@ -41,16 +44,19 @@ export async function runImportDir(
   if (id) {
     userId = id;
   } else {
-    const user = await prisma.user.findFirst({
-      where: { username: 'administrator', role: 'SUPERADMIN' },
-    });
+    const [candidate] = await db
+      .select({ id: users.id, username: users.username, role: users.role })
+      .from(users)
+      .where(eq(users.username, 'administrator'))
+      .limit(1);
+    const user = candidate?.role === 'SUPERADMIN' ? candidate : null;
 
     if (!user) {
-      const firstSuperAdmin = await prisma.user.findFirst({
-        where: {
-          role: 'SUPERADMIN',
-        },
-      });
+      const [firstSuperAdmin] = await db
+        .select({ id: users.id, username: users.username, role: users.role })
+        .from(users)
+        .where(eq(users.role, 'SUPERADMIN'))
+        .limit(1);
 
       if (!firstSuperAdmin) throw new Error('No superadmin found or "administrator" user.');
 
@@ -61,26 +67,21 @@ export async function runImportDir(
   }
 
   if (folder) {
-    const exists = await prisma.folder.findFirst({
-      where: {
-        id: folder,
-        userId,
-      },
-    });
+    const exists = await getOwnedFolder(folder, userId);
 
     if (!exists) throw new Error('Folder not found: ' + folder);
   }
 
-  const dirFiles = await readdir(fullPath);
+  const dirents = await readdir(fullPath);
+  const filenames = dirents.filter((filename) => !parse(filename).base.startsWith('.thumbnail'));
   const data = [];
-  const files = [];
+  const filePaths = [];
   const errors = [];
 
-  for (let i = 0; i !== dirFiles.length; ++i) {
-    const info = parse(dirFiles[i]);
-    if (info.base.startsWith('.thumbnail')) continue;
+  for (let i = 0; i !== filenames.length; ++i) {
+    const info = parse(filenames[i]);
 
-    const filePath = join(fullPath, dirFiles[i]);
+    const filePath = join(fullPath, filenames[i]);
     const { size } = statSync(filePath);
     const mime = await guess(info.ext.replace('.', ''));
 
@@ -91,21 +92,23 @@ export async function runImportDir(
       userId,
       ...(folder ? { folderId: folder } : {}),
     });
-    files.push(filePath);
+    filePaths.push(filePath);
   }
 
   let inserted = 0;
+  let created: { id: string }[] = [];
 
-  if (!skipDb && data.length > 0) {
-    const result = await prisma.file.createMany({
-      data,
-    });
-    inserted = result.count;
+  if (!skipDb && data.length) {
+    const insertedFiles = await db.insert(files).values(data).returning({ id: files.id });
+    created = insertedFiles;
+    inserted = insertedFiles.length;
   }
+  console.log(`Inserted ${created.length} files into the database.`);
 
   const totalSize = data.reduce((acc, file) => acc + file.size, 0);
   let imported = 0;
   let deleted = 0;
+  let completed = 0;
 
   if (config.datasource.type === 'local')
     await mkdir(config.datasource.local!.directory, { recursive: true });
@@ -117,15 +120,32 @@ export async function runImportDir(
     if (!data[i]) continue;
 
     try {
-      await datasource.put(data[i].name, files[i], {
+      const start = process.hrtime();
+
+      await datasource.put(data[i].name, filePaths[i], {
         mimetype: data[i].type ?? 'application/octet-stream',
         noDelete: true,
       });
+
+      const diff = process.hrtime(start);
+      const time = diff[0] * 1e9 + diff[1];
+      const timeStr = time > 1e9 ? `${(time / 1e9).toFixed(2)}s` : `${(time / 1e6).toFixed(2)}ms`;
+      const uploadSpeed = (data[i].size / time) * 1e9;
+      const uploadSpeedStr =
+        uploadSpeed > 1e9
+          ? `${(uploadSpeed / 1e9).toFixed(2)} GB/s`
+          : `${(uploadSpeed / 1e6).toFixed(2)} MB/s`;
+      completed += data[i].size;
+
+      console.log(
+        `Uploaded ${data[i].name} in ${timeStr} (${bytes(data[i].size)}) ${i + 1}/${filenames.length} ${bytes(completed)}/${bytes(totalSize)} ${uploadSpeedStr}`,
+      );
+
       ++imported;
 
       if (deleteSource) {
         try {
-          await rm(files[i], { force: true });
+          await rm(filePaths[i], { force: true });
           ++deleted;
         } catch (err: any) {
           errors.push(`Imported ${data[i].name} but failed to delete source: ${err.message}`);
@@ -141,7 +161,7 @@ export async function runImportDir(
     imported,
     deleted,
     totalSize,
-    skipped: dirFiles.length - data.length,
+    skipped: dirents.length - data.length,
     files: data.map((d) => d.name),
     errors,
   };
