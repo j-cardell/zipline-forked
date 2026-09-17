@@ -1,8 +1,9 @@
 import { useUserStore } from '@/lib/client/store/user';
 import type { File as DbFile } from '@/lib/db/models/file';
+import { formatRootUrl } from '@/lib/url';
 import { useMemo } from 'react';
 
-function appendShareOrToken(url: string, token?: string | null, share?: string | null) {
+function appendShareOrToken(url: string, token?: string | null, share?: string | null): string {
   const params = new URLSearchParams();
   if (token) params.set('token', token);
   if (share) params.set('share', share);
@@ -36,18 +37,16 @@ export default function useFileUrls({
 
     const thumb = file.thumbnail?.path;
     const thumbnailUrl = thumb
-      ? user
-        ? `/api/user/files/${thumb}/raw`
-        : appendShareOrToken(`/raw/${thumb}`, token, share)
+      ? appendShareOrToken(user ? `/api/user/files/${thumb}/raw` : formatRootUrl('/raw', thumb), token, share)
       : null;
 
     return {
       fileUrl: appendShareOrToken(
-        user ? `/api/user/files/${file.id}/raw` : `/raw/${file.name}`,
+        user ? `/api/user/files/${file.id}/raw` : formatRootUrl('/raw', file.name!),
         token,
         share,
       ),
-      viewUrl: appendShareOrToken(`/view/${file.name}`, token, share),
+      viewUrl: appendShareOrToken(formatRootUrl('/view', file.name!), token, share),
       thumbnailUrl,
     };
   }, [token, share, blobUrl, file, user]);

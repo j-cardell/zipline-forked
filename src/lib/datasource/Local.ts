@@ -70,7 +70,7 @@ export class LocalDatasource extends Datasource {
     await mkdir(dirname(path), { recursive: true });
 
     // handles path-based writes without duplicating bytes when the source can be consumed
-    if (typeof data === 'string' && data.startsWith('/')) {
+    if (typeof data === 'string') {
       const exists = await existsAndCanRW(data);
       if (!exists)
         throw new Error(

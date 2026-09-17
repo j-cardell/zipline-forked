@@ -4,6 +4,7 @@ import { filePasswordExtra } from '@/lib/db/models/file';
 import { userViewSchema } from '@/lib/db/models/user';
 import { escapeLike } from '@/lib/db/utils';
 import { sanitizeFilename } from '@/lib/fs';
+import { formatRootUrl } from '@/lib/url';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { verifyFileAccess } from '@/server/middleware/fileAccess';
 import { rawFileHandler } from './raw/[id]';
@@ -50,7 +51,9 @@ export async function filesRoute(
   });
   if (!access.allowed) return res.callNotFound();
 
-  const viewUrl = `/view/${encodeURIComponent(file.name)}${req.query.share ? `?share=${encodeURIComponent(req.query.share)}` : ''}`;
+  const viewUrl = formatRootUrl('/view', file.name, {
+    ...(req.query.share && { share: req.query.share }),
+  });
 
   if (file.password) return res.redirect(viewUrl);
 

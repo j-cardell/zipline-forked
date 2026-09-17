@@ -38,6 +38,7 @@ export const ENVS = [
 
   // database stuff
   env('core.trustProxy', 'CORE_TRUST_PROXY', 'boolean', true),
+  env('core.trustedProxies', 'CORE_TRUSTED_PROXIES', 'string[]', true),
   env('core.returnHttpsUrls', 'CORE_RETURN_HTTPS_URLS', 'boolean', true),
   env('core.defaultDomain', 'CORE_DEFAULT_DOMAIN', 'string', true),
   env('core.tempDirectory', 'CORE_TEMP_DIRECTORY', 'string', true),
@@ -190,12 +191,26 @@ export function checkDbVars(): boolean {
   if (process.env.DATABASE_URL) return true;
 
   for (let i = 0; i !== REQUIRED_DB_VARS.length; ++i) {
-    if (process.env[REQUIRED_DB_VARS[i]] === undefined) {
+    // readDbVars() accepts either the variable or its *_FILE variant
+    if (
+      process.env[REQUIRED_DB_VARS[i]] === undefined &&
+      process.env[`${REQUIRED_DB_VARS[i]}_FILE`] === undefined
+    ) {
       return false;
     }
   }
 
   return true;
+}
+
+export function buildDatabaseUrl(
+  username: string,
+  password: string,
+  host: string,
+  port: string | number,
+  name: string,
+): string {
+  return `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}/${name}`;
 }
 
 export function readDbVars(): Record<string, string> {
@@ -271,6 +286,23 @@ export function readEnv(): EnvResult {
       envResult.dbEnv[env.property] = parsed;
     } else {
       envResult.env[env.property] = parsed;
+    }
+  }
+
+  // core.databaseUrl is required by the config schema, but the database can also be
+  // configured through DATABASE_USERNAME/PASSWORD/HOST/PORT/NAME (or their *_FILE
+  // variants). Derive the URL from the values the loop above already parsed so both
+  // forms keep validating; an empty DATABASE_URL falls back like readDbVars() does.
+  if (!envResult.env['core.databaseUrl']) {
+    const { dbEnv } = envResult;
+    const username = dbEnv['core.database.username'];
+    const password = dbEnv['core.database.password'];
+    const host = dbEnv['core.database.host'];
+    const port = dbEnv['core.database.port'];
+    const name = dbEnv['core.database.name'];
+
+    if (username && password && host && port && name) {
+      envResult.env['core.databaseUrl'] = buildDatabaseUrl(username, password, host, port, name);
     }
   }
 
