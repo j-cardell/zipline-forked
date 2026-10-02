@@ -57,8 +57,6 @@ export async function uploadPartialFiles(
     folder,
   }: UploadHandlers &
     UploadHeadersOptions & {
-      clipboard: { copy: (text: string) => void };
-      clearEphemeral?: () => void;
       config: ReturnType<typeof useConfig>;
     },
 ): Promise<{ files: Response['/api/upload/partial']['files'] } | null> {
@@ -88,7 +86,7 @@ export async function uploadPartialFiles(
       chunks.push({
         blob: file.slice(start, end),
         start,
-        end,
+        end: end - 1,
       });
     }
 
@@ -104,7 +102,7 @@ export async function uploadPartialFiles(
     });
 
     let ready = true;
-    let identifier: string | undefined;
+    let token: string | undefined;
     let failed = false;
 
     for (let j = 0; j !== nChunks; ++j) {
@@ -116,8 +114,6 @@ export async function uploadPartialFiles(
 
       const body = new FormData();
       body.append('file', chunks[j].blob);
-
-      setLoading(true);
 
       notifications.update({
         id: 'upload-partial',
@@ -163,9 +159,7 @@ export async function uploadPartialFiles(
             return;
           }
 
-          if (j === 0) {
-            identifier = res.partialIdentifier;
-          }
+          token = res.partialToken;
 
           if (j === chunks.length - 1) {
             uploadedFiles.push(...res.files);
@@ -204,7 +198,7 @@ export async function uploadPartialFiles(
       req.open('POST', '/api/upload/partial');
       applyUploadHeaders(req, { options, ephemeral, folder });
 
-      identifier && req.setRequestHeader('x-zipline-p-identifier', identifier);
+      token && req.setRequestHeader('x-zipline-p-token', token);
       req.setRequestHeader('x-zipline-p-filename', encodeURIComponent(file.name));
       req.setRequestHeader('x-zipline-p-lastchunk', j === chunks.length - 1 ? 'true' : 'false');
       req.setRequestHeader('x-zipline-p-content-type', file.type);

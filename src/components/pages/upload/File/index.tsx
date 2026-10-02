@@ -136,8 +136,6 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
         setFiles,
         setLoading,
         setProgress,
-        clipboard,
-        clearEphemeral,
         options,
         ephemeral,
         config,
