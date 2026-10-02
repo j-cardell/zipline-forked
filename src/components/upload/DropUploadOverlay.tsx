@@ -85,8 +85,6 @@ export default function DropUploadOverlay({
             setFiles,
             setLoading,
             setProgress,
-            clipboard,
-            clearEphemeral,
             options,
             ephemeral,
             config,

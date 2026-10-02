@@ -358,8 +358,6 @@ export default function Layout() {
             setFiles: () => {},
             setLoading: () => {},
             setProgress: () => {},
-            clipboard,
-            clearEphemeral,
             options,
             ephemeral,
             config,
