@@ -375,6 +375,7 @@ export const schema = z.object({
         authorizeUrl: z.url(),
         userinfoUrl: z.url(),
         tokenUrl: z.url(),
+        endSessionUrl: z.url().nullable().default(null),
         redirectUri: z.url().nullable().default(null),
       })
       .or(
@@ -384,6 +385,7 @@ export const schema = z.object({
           authorizeUrl: z.undefined().optional(),
           userinfoUrl: z.undefined().optional(),
           tokenUrl: z.undefined().optional(),
+          endSessionUrl: z.undefined().optional(),
           redirectUri: z.undefined().optional(),
         }),
       ),

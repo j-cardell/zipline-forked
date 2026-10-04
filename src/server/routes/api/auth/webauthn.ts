@@ -170,7 +170,7 @@ export default typedPlugin(
 
         const { newCounter } = verification.authenticationInfo;
 
-        await saveSession(session, user, false);
+        await saveSession(session, user, false, null);
 
         const [updated] = await db
           .update(userPasskeys)

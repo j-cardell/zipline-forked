@@ -1,3 +1,4 @@
+import type { Response } from '@/lib/api/response';
 import { useUserStore } from '@/lib/client/store/user';
 import { showNotification } from '@mantine/notifications';
 import { IconLogout } from '@tabler/icons-react';
@@ -19,9 +20,11 @@ export function useLogout() {
 
     const res = await fetch('/api/auth/logout');
     if (res.ok) {
+      const data: Response['/api/auth/logout'] = await res.json();
       setUser(null);
       await mutate('/api/user', null, false);
-      navigate('/auth/login');
+      if (data.redirectUrl) window.location.href = data.redirectUrl;
+      else navigate('/auth/login');
     }
   };
 

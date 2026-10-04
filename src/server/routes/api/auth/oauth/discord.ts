@@ -24,7 +24,7 @@ async function discordOauth(
         clientId: config.oauth.discord.clientId!,
         origin: `${config.core.returnHttpsUrls ? 'https' : 'http'}://${host}`,
         state: await generateOAuthState(session, state === 'link' ? 'link' : 'default'),
-        redirectUri: config.oauth.discord.redirectUri!,
+        redirectUri: config.oauth.discord.redirectUri,
       }),
     );
   }
@@ -40,10 +40,6 @@ async function discordOauth(
     scope: 'identify',
   });
 
-  logger.debug('discord oauth request', {
-    body: body.toString(),
-  });
-
   const res = await fetch('https://discord.com/api/oauth2/token', {
     method: 'POST',
     body,
@@ -53,24 +49,28 @@ async function discordOauth(
   });
 
   if (!res.ok) {
-    const text = await res.text();
     logger.debug('discord oauth failed with a non 200 status code', {
       status: res.status,
-      text,
     });
 
     throw new ApiError(6004);
   }
 
-  const json = await res.json();
-
-  if (!json.access_token) throw new ApiError(6005);
-  if (!json.refresh_token) throw new ApiError(6006);
+  const json = await res.json().catch(() => null);
+  if (!json || typeof json !== 'object' || json.error) throw new ApiError(6008);
+  if (typeof json.access_token !== 'string' || !json.access_token) throw new ApiError(6005);
 
   const userJson = await discordUser({
     accessToken: json.access_token,
   });
-  if (!userJson) throw new ApiError(6007);
+  if (
+    !userJson ||
+    typeof userJson.id !== 'string' ||
+    !/^\d+$/.test(userJson.id) ||
+    typeof userJson.username !== 'string' ||
+    !userJson.username
+  )
+    throw new ApiError(6007);
 
   logger.debug('user', { '@me': userJson });
 
@@ -80,13 +80,18 @@ async function discordOauth(
 
   if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(userJson.id)) throw new ApiError(3017);
 
+  const defaultAvatar =
+    userJson.discriminator === '0'
+      ? Number((BigInt(userJson.id) >> 22n) % 6n)
+      : Number(userJson.discriminator) % 5;
   const avatar = userJson.avatar
     ? `https://cdn.discordapp.com/avatars/${userJson.id}/${userJson.avatar}.png`
-    : `https://cdn.discordapp.com/embed/avatars/${userJson.discriminator % 5}.png`;
+    : `https://cdn.discordapp.com/embed/avatars/${defaultAvatar}.png`;
 
   return {
     access_token: json.access_token,
-    refresh_token: json.refresh_token,
+    refresh_token:
+      typeof json.refresh_token === 'string' && json.refresh_token ? json.refresh_token : undefined,
     username: userJson.username,
     user_id: userJson.id,
     avatar: await fetchToDataURL(avatar),

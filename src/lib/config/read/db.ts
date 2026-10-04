@@ -96,6 +96,7 @@ export const DATABASE_TO_PROP = {
   oauthOidcAuthorizeUrl: 'oauth.oidc.authorizeUrl',
   oauthOidcUserinfoUrl: 'oauth.oidc.userinfoUrl',
   oauthOidcTokenUrl: 'oauth.oidc.tokenUrl',
+  oauthOidcEndSessionUrl: 'oauth.oidc.endSessionUrl',
   oauthOidcRedirectUri: 'oauth.oidc.redirectUri',
 
   mfaTotpEnabled: 'mfa.totp.enabled',

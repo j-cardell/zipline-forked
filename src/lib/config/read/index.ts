@@ -127,6 +127,7 @@ export const rawConfig: any = {
       authorizeUrl: undefined,
       userinfoUrl: undefined,
       tokenUrl: undefined,
+      endSessionUrl: undefined,
     },
   },
   discord: null,

@@ -67,8 +67,10 @@ export default function Login() {
 
   const willRedirect =
     config?.oauth?.bypassLocalLogin &&
+    !config.firstSetup &&
     Object.values(config?.oauthEnabled ?? {}).filter((x) => x === true).length === 1 &&
-    query.get('local') !== 'true';
+    query.get('local') !== 'true' &&
+    query.get('logged_out') !== 'true';
 
   useEffect(() => {
     if (willRedirect && config) {

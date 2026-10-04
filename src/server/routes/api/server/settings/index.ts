@@ -1,10 +1,16 @@
 import { ApiError } from '@/lib/api/errors';
 import { bytes } from '@/lib/bytes';
 import { checkOutput, COMPRESS_TYPES } from '@/lib/compress';
-import { reloadSettings } from '@/lib/config';
-import type { readDatabaseSettings } from '@/lib/config/read/db';
+import { config, reloadSettings } from '@/lib/config';
+import { DATABASE_TO_PROP, type readDatabaseSettings } from '@/lib/config/read/db';
+import { getProperty } from '@/lib/config/read/transform';
 import { safeConfig } from '@/lib/config/safe';
-import { MAX_SAFE_TIMEOUT_MS, MIME_REGEX, trustedProxiesSchema } from '@/lib/config/validate';
+import {
+  MAX_SAFE_TIMEOUT_MS,
+  MIME_REGEX,
+  schema as configSchema,
+  trustedProxiesSchema,
+} from '@/lib/config/validate';
 import { db } from '@/lib/db';
 import { getSettings, updateSettings } from '@/lib/db/models/zipline';
 import { zipline } from '@/lib/db/schema';
@@ -286,7 +292,12 @@ export default typedPlugin(
                   .refine((s) => s === '' || /^\d+(,\d+)*$/.test(s), 'Discord IDs must be comma-separated'),
               ])
               .transform((value) =>
-                typeof value === 'string' ? value.split(',').map((id) => id.trim()) : value,
+                typeof value === 'string'
+                  ? value
+                      .split(',')
+                      .map((id) => id.trim())
+                      .filter(Boolean)
+                  : value,
               ),
             oauthDiscordDeniedIds: z
               .union([
@@ -296,7 +307,12 @@ export default typedPlugin(
                   .refine((s) => s === '' || /^\d+(,\d+)*$/.test(s), 'Discord IDs must be comma-separated'),
               ])
               .transform((value) =>
-                typeof value === 'string' ? value.split(',').map((id) => id.trim()) : value,
+                typeof value === 'string'
+                  ? value
+                      .split(',')
+                      .map((id) => id.trim())
+                      .filter(Boolean)
+                  : value,
               ),
 
             oauthGoogleClientId: z.string().nullable(),
@@ -312,6 +328,7 @@ export default typedPlugin(
             oauthOidcAuthorizeUrl: z.url().nullable(),
             oauthOidcTokenUrl: z.url().nullable(),
             oauthOidcUserinfoUrl: z.url().nullable(),
+            oauthOidcEndSessionUrl: z.url().nullable(),
             oauthOidcRedirectUri: z.url().endsWith('/api/auth/oauth/oidc').nullable(),
 
             mfaTotpEnabled: z.boolean(),
@@ -384,56 +401,47 @@ export default typedPlugin(
             ]),
           })
           .partial()
-          .refine(
-            (data) =>
-              (!data.oauthDiscordClientId || data.oauthDiscordClientSecret) &&
-              (!data.oauthDiscordClientSecret || data.oauthDiscordClientId),
-            {
-              message: 'discord oauth fields are incomplete',
-              path: ['oauthDiscordClientId', 'oauthDiscordClientSecret'],
-            },
-          )
-          .refine(
-            (data) =>
-              (!data.oauthGoogleClientId || data.oauthGoogleClientSecret) &&
-              (!data.oauthGoogleClientSecret || data.oauthGoogleClientId),
-            {
-              message: 'google oauth fields are incomplete',
-              path: ['oauthGoogleClientId', 'oauthGoogleClientSecret'],
-            },
-          )
-          .refine(
-            (data) =>
-              (!data.oauthGithubClientId || data.oauthGithubClientSecret) &&
-              (!data.oauthGithubClientSecret || data.oauthGithubClientId),
-            {
-              message: 'github oauth fields are incomplete',
-              path: ['oauthGithubClientId', 'oauthGithubClientSecret'],
-            },
-          )
-          .refine(
-            (data) =>
-              (!data.oauthOidcClientId &&
-                !data.oauthOidcClientSecret &&
-                !data.oauthOidcAuthorizeUrl &&
-                !data.oauthOidcTokenUrl &&
-                !data.oauthOidcUserinfoUrl) ||
-              (data.oauthOidcClientId &&
-                data.oauthOidcClientSecret &&
-                data.oauthOidcAuthorizeUrl &&
-                data.oauthOidcTokenUrl &&
-                data.oauthOidcUserinfoUrl),
-            {
-              message: 'oidc oauth fields are incomplete',
-              path: [
+          .superRefine((data, ctx) => {
+            const providers = {
+              discord: ['oauthDiscordClientId', 'oauthDiscordClientSecret', 'oauthDiscordRedirectUri'],
+              google: ['oauthGoogleClientId', 'oauthGoogleClientSecret', 'oauthGoogleRedirectUri'],
+              github: ['oauthGithubClientId', 'oauthGithubClientSecret', 'oauthGithubRedirectUri'],
+              oidc: [
                 'oauthOidcClientId',
                 'oauthOidcClientSecret',
                 'oauthOidcAuthorizeUrl',
                 'oauthOidcTokenUrl',
                 'oauthOidcUserinfoUrl',
+                'oauthOidcEndSessionUrl',
+                'oauthOidcRedirectUri',
               ],
-            },
-          )
+            } satisfies Record<string, (keyof Settings)[]>;
+
+            for (const [provider, fields] of Object.entries(providers)) {
+              if (!fields.some((field) => data[field] !== undefined)) continue;
+
+              const values = Object.fromEntries(
+                fields.map((field) => {
+                  const value =
+                    data[field] !== undefined && !global.__tamperedConfig__?.includes(field)
+                      ? data[field]
+                      : getProperty(config, DATABASE_TO_PROP[field]);
+
+                  return [DATABASE_TO_PROP[field].split('.')[2], value ?? undefined];
+                }),
+              );
+
+              if (
+                !configSchema.shape.oauth.shape[provider as keyof typeof providers].safeParse(values).success
+              ) {
+                ctx.addIssue({
+                  code: 'custom',
+                  message: `${provider} oauth fields are incomplete`,
+                  path: fields,
+                });
+              }
+            }
+          })
           .refine((data) => !data.ratelimitWindow || (data.ratelimitMax && data.ratelimitMax > 0), {
             message: 'ratelimitMax must be set if ratelimitWindow is set',
             path: ['ratelimitMax'],

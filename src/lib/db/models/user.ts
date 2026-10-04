@@ -78,7 +78,12 @@ const publicUserColumnsWithAvatar = {
 const totpEnabled = (user: typeof users) => isNotNull(user.totpSecret).mapWith(Boolean);
 
 const userRelations = {
-  sessions: true,
+  sessions: {
+    columns: {
+      oauthProvider: false,
+      oidcIdToken: false,
+    },
+  },
   oauthProviders: {
     columns: {
       accessToken: false,

@@ -24,7 +24,7 @@ async function googleOauth(
         clientId: config.oauth.google.clientId!,
         origin: `${config.core.returnHttpsUrls ? 'https' : 'http'}://${host}`,
         state: await generateOAuthState(session, state === 'link' ? 'link' : 'default'),
-        redirectUri: config.oauth.google.redirectUri!,
+        redirectUri: config.oauth.google.redirectUri,
       }),
     );
   }
@@ -37,10 +37,7 @@ async function googleOauth(
     redirect_uri:
       config.oauth.google.redirectUri ??
       `${config.core.returnHttpsUrls ? 'https' : 'http'}://${host}/api/auth/oauth/google`,
-    access_type: 'offline',
   });
-
-  logger.debug('google oauth request', { body: body.toString() });
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -51,29 +48,31 @@ async function googleOauth(
   });
 
   if (!res.ok) {
-    const text = await res.text();
     logger.debug('google oauth failed with a non 200 status code', {
       status: res.status,
-      text,
     });
 
     throw new ApiError(6004);
   }
 
-  const json = await res.json();
-  if (!json.access_token) throw new ApiError(6005);
+  const json = await res.json().catch(() => null);
+  if (!json || typeof json !== 'object' || json.error) throw new ApiError(6008);
+  if (typeof json.access_token !== 'string' || !json.access_token) throw new ApiError(6005);
 
   const userJson = await googleUser({
     accessToken: json.access_token,
   });
-  if (!userJson) throw new ApiError(6007);
+  if (!userJson || typeof userJson.id !== 'string' || !userJson.id) throw new ApiError(6007);
 
   logger.debug('user', { userinfo: userJson });
 
   return {
     access_token: json.access_token,
-    refresh_token: json.refresh_token,
-    username: userJson.given_name,
+    refresh_token:
+      typeof json.refresh_token === 'string' && json.refresh_token ? json.refresh_token : undefined,
+    username: [userJson.given_name, userJson.name, userJson.id].find(
+      (name) => typeof name === 'string' && name.trim(),
+    ),
     user_id: userJson.id,
     avatar: await fetchToDataURL(userJson.picture),
   };

@@ -1,13 +1,14 @@
 import { detectClient, ZiplineClient } from '@/lib/api/detect';
 import { config } from '@/lib/config';
 import { db } from '@/lib/db';
+import type { OAuthProviderType } from '@/lib/db/enums';
 import { userSessions } from '@/lib/db/schema';
 import { randomCharacters } from '@/lib/random';
 import { fastifyCookie } from '@fastify/cookie';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { IncomingMessage, ServerResponse } from 'http';
 import { getIronSession, type SessionOptions } from 'iron-session';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { parseUserToken } from './middleware/user';
 
 const cookieOptions: NonNullable<SessionOptions['cookieOptions']> = {
@@ -25,6 +26,8 @@ export type ZiplineSession = {
 
   pkceVerifier?: string;
   oauthState?: string;
+  oauthProvider?: OAuthProviderType;
+  oauthSessionId?: string;
   tokenAuth?: boolean;
 };
 
@@ -66,10 +69,13 @@ export async function saveSession(
   session: ZiplineIronSession,
   user: { id: string } & Record<string, any>,
   overwriteSessions = true,
+  oauth?: { provider: OAuthProviderType; idToken?: string } | null,
 ) {
   cookieOptions.secure = config.core.returnHttpsUrls;
 
+  if (session.id !== user.id) session.sessionId = null;
   session.id = user.id;
+  delete session.tokenAuth;
 
   if (!session.client) {
     session.client = {
@@ -78,6 +84,11 @@ export async function saveSession(
       ua: 'unknown',
     };
   }
+
+  const authentication = {
+    oauthProvider: oauth?.provider ?? null,
+    oidcIdToken: oauth?.provider === 'OIDC' ? (oauth.idToken ?? null) : null,
+  };
 
   if (overwriteSessions || !session.sessionId) {
     const sessionId = randomCharacters(32);
@@ -89,6 +100,7 @@ export async function saveSession(
       client: session.client.client,
       device: session.client.device,
       ua: session.client.ua,
+      ...authentication,
     };
 
     if (overwriteSessions) {
@@ -99,6 +111,11 @@ export async function saveSession(
     } else {
       await db.insert(userSessions).values(dbSession);
     }
+  } else if (oauth !== undefined) {
+    await db
+      .update(userSessions)
+      .set(authentication)
+      .where(and(eq(userSessions.id, session.sessionId), eq(userSessions.userId, user.id)));
   }
 
   await session.save();

@@ -58,6 +58,7 @@ function Form({ data, isLoading }: { data: Response['/api/server/settings']; isL
       oauthOidcAuthorizeUrl: data.settings.oauthOidcAuthorizeUrl,
       oauthOidcTokenUrl: data.settings.oauthOidcTokenUrl,
       oauthOidcUserinfoUrl: data.settings.oauthOidcUserinfoUrl,
+      oauthOidcEndSessionUrl: data.settings.oauthOidcEndSessionUrl,
       oauthOidcRedirectUri: data.settings.oauthOidcRedirectUri,
     },
     enhanceGetInputProps: (payload) => ({
@@ -220,6 +221,11 @@ function Form({ data, isLoading }: { data: Response['/api/server/settings']; isL
               <TextInput
                 label={t('oauth.oidc.userinfoUrl')}
                 {...form.getInputProps('oauthOidcUserinfoUrl')}
+              />
+              <TextInput
+                label={t('oauth.oidc.endSessionUrl.label')}
+                description={t('oauth.oidc.endSessionUrl.description')}
+                {...form.getInputProps('oauthOidcEndSessionUrl')}
               />
               <TextInput
                 label={t('oauth.provider.redirectUrl.label', { provider: 'OIDC' })}

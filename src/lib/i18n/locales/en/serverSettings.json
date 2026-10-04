@@ -388,7 +388,7 @@
     },
     "loginOnly": {
       "label": "Login Only",
-      "description": "Disables registration and only allows login with OAuth, existing users can link providers for example."
+      "description": "Prevents creating new accounts through OAuth. Existing users can still log in or link providers."
     },
     "provider": {
       "clientId": "{{provider}} Client ID",
@@ -411,7 +411,11 @@
     "oidc": {
       "authorizeUrl": "OIDC Authorize URL",
       "tokenUrl": "OIDC Token URL",
-      "userinfoUrl": "OIDC Userinfo URL"
+      "userinfoUrl": "OIDC Userinfo URL",
+      "endSessionUrl": {
+        "label": "OIDC End Session URL",
+        "description": "The end_session_endpoint from your OIDC provider. Leave empty to only log out of Zipline."
+      }
     }
   },
   "pwa": {
