@@ -140,7 +140,6 @@ export default function Login() {
     if (val.length === 6) await handleLoginSubmit(form.values, val);
   };
 
-  if (configLoading || !config) return <LoadingOverlay visible />;
   if (configError)
     return (
       <GenericError
@@ -149,6 +148,7 @@ export default function Login() {
         details={configError}
       />
     );
+  if (configLoading || !config) return <LoadingOverlay visible />;
 
   const hasBg = !!config.website.loginBackground;
 

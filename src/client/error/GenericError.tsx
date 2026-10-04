@@ -13,12 +13,10 @@ export default function GenericError({
   details?: Record<string, any>;
 }) {
   const { t } = useTranslation('layout');
-  const routerError: any = useRouteError();
-  if (routerError?.status === 404) return <FourOhFour />;
+  const routeError: any = useRouteError();
+  if (routeError?.status === 404) return <FourOhFour />;
 
-  const routeError = JSON.parse(JSON.stringify(routerError, Object.getOwnPropertyNames(routerError)));
-
-  console.error(routerError);
+  console.error(routeError ?? details);
 
   return (
     <Container my='lg'>
@@ -28,7 +26,16 @@ export default function GenericError({
         {details && (
           <Paper withBorder px={3} py={3}>
             <ScrollArea>
-              <pre style={{ margin: 0 }}>{JSON.stringify({ routeError, details }, null, 2)}</pre>
+              <pre style={{ margin: 0 }}>
+                {JSON.stringify(
+                  { routeError, details },
+                  (_, value) =>
+                    value instanceof Error
+                      ? { ...value, name: value.name, message: value.message, stack: value.stack }
+                      : value,
+                  2,
+                )}
+              </pre>
             </ScrollArea>
           </Paper>
         )}
