@@ -8,7 +8,7 @@ import { useUploadOptionsStore } from '@/lib/client/store/uploadOptions';
 import { ActionIcon, Button, Group, Select, Tabs, Textarea, TextInput, Title } from '@mantine/core';
 import { useClipboard } from '@mantine/hooks';
 import {
-  IconCode,
+  IconCursorText,
   IconEyeFilled,
   IconFiles,
   IconPlus,
@@ -16,12 +16,14 @@ import {
   IconUpload,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
 import UploadOptionsButton from '../UploadOptionsButton';
 import styles from './index.module.css';
 
 export default function UploadText() {
+  const { t } = useTranslation('upload');
   const clipboard = useClipboard();
   const [options, ephemeral, clearEphemeral] = useUploadOptionsStore(
     useShallow((state) => [state.options, state.ephemeral, state.clearEphemeral]),
@@ -104,7 +106,7 @@ export default function UploadText() {
   return (
     <>
       <Group gap='sm'>
-        <Title order={1}>Upload snippet</Title>
+        <Title order={1}>{t('text.title')}</Title>
 
         <Button
           variant='outline'
@@ -113,17 +115,17 @@ export default function UploadText() {
           to='/dashboard/files'
           leftSection={<IconFiles size='1rem' />}
         >
-          Go to files
+          {t('actions.goToFiles')}
         </Button>
       </Group>
 
       <Tabs defaultValue='textareas' variant='pills' my='sm'>
         <Tabs.List my='sm'>
-          <Tabs.Tab value='textareas' leftSection={<IconCode size='1rem' />}>
-            Editor
+          <Tabs.Tab value='textareas' leftSection={<IconCursorText size='1rem' />}>
+            {t('text.tabs.text')}
           </Tabs.Tab>
           <Tabs.Tab value='preview' leftSection={<IconEyeFilled size='1rem' />}>
-            Preview
+            {t('text.tabs.preview')}
           </Tabs.Tab>
         </Tabs.List>
 
@@ -134,14 +136,14 @@ export default function UploadText() {
                 <TextInput
                   size='xs'
                   placeholder='snippet.js'
-                  label='Filename'
+                  label={t('text.filename')}
                   value={file.name}
                   onChange={(e) => setFile(index, 'name', e.currentTarget.value)}
                   style={{ flex: 1 }}
                 />
                 <Select
                   size='xs'
-                  label='Language'
+                  label={t('text.language')}
                   data={codeMap.map((meta) => ({ value: meta.ext, label: meta.name }))}
                   value={file.lang}
                   onChange={(value) => value && handleLangChange(index, value)}
@@ -168,7 +170,7 @@ export default function UploadText() {
                 disabled={loading}
                 className={styles.textarea}
                 resize='vertical'
-                placeholder='Paste your code here...'
+                placeholder={t('text.placeholder')}
                 rows={16}
               />
             </div>
@@ -180,7 +182,7 @@ export default function UploadText() {
               size='compact-sm'
               leftSection={<IconPlus size='1rem' />}
             >
-              Add snippet
+              {t('text.addFile')}
             </Button>
 
             {files.some((file) => file.text.length > 0) && (
@@ -190,7 +192,7 @@ export default function UploadText() {
                 leftSection={<IconTrashFilled size='1rem' />}
                 onClick={() => removeFile(true)}
               >
-                Clear all
+                {t('actions.clearAll')}
               </Button>
             )}
           </Group>
@@ -199,7 +201,7 @@ export default function UploadText() {
         <Tabs.Panel value='preview'>
           {files.map((file, index) => (
             <div key={index}>
-              <Title order={4}>{file.name || `snippet.${file.lang}`}</Title>
+              <Title order={4}>{t('text.fileHeading', { number: index + 1 })}</Title>
               <Render mode={renderMode(file.lang)} code={file.text} language={file.lang} />
             </div>
           ))}
@@ -214,7 +216,7 @@ export default function UploadText() {
           disabled={files.some((file) => file.text.length === 0) || loading}
           onClick={upload}
         >
-          Upload {files.length} snippet{files.length !== 1 && 's'} ({bytes(aggSize())})
+          {t('actions.upload', { count: files.length, size: bytes(aggSize()) })}
         </Button>
       </Group>
     </>

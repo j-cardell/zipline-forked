@@ -2,6 +2,8 @@ import DashboardFile from '@/components/file/DashboardFile';
 import { addMultipleToFolder, createZipShare, deleteMultipleFiles } from '@/components/file/actions';
 import FolderSelectModal from '@/components/folders/FolderSelectModal';
 import { useFileNavStore } from '@/lib/client/store/fileNav';
+import { useViewStore } from '@/lib/client/store/view';
+import { useJustifiedLayout } from '@/lib/client/layout/useJustifiedLayout';
 import {
   Button,
   Center,
@@ -22,6 +24,7 @@ import { IconFilesOff, IconFileUpload, IconFolder, IconTrash, IconArchive } from
 import { parseAsInteger, useQueryState } from 'nuqs';
 import {
   lazy,
+  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -30,14 +33,13 @@ import {
   useState,
   forwardRef,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
-import { useJustifiedLayout } from '@/lib/client/layout/useJustifiedLayout';
-import { useApiPagination } from '../useApiPagination';
-import { useInfiniteFiles } from '../useInfiniteFiles';
-import { useViewStore } from '@/lib/client/store/view';
 import { getGridSkeletonHeight } from '@/components/GridTableSwitcher';
 import { File } from '@/lib/db/models/file';
+import { useApiPagination } from '../useApiPagination';
+import { useInfiniteFiles } from '../useInfiniteFiles';
 import styles from './FilesGridView.module.css';
 
 const DashboardFileModal = lazy(() => import('@/components/file/DashboardFile/DashboardFileModal'));
@@ -63,7 +65,9 @@ export default forwardRef<
     infinite?: boolean;
   }
 >(function Files({ id, folderId, search, infinite }, ref) {
+  const { t } = useTranslation('files');
   const gridSize = useViewStore((state) => state.filesGridSize);
+
   const [page, setPage] = useQueryState('page', parseAsInteger.withDefault(1));
   const [perpage, setPerpage] = useQueryState('perpage', parseAsInteger.withDefault(24));
 
@@ -170,13 +174,13 @@ export default forwardRef<
 
   const handleMove = useCallback(() => {
     const modalId = modals.open({
-      title: 'Move to folder',
+      title: t('actions.move.title'),
       size: 'lg',
       centered: true,
       children: (
         <FolderSelectModal
           allowNoFolder={false}
-          confirmLabel='Move'
+          confirmLabel={t('actions.move.confirm')}
           onSelect={async (folderId) => {
             if (folderId === undefined) return;
             await addMultipleToFolder(selectedFiles, folderId);
@@ -189,7 +193,7 @@ export default forwardRef<
       ),
       onClose: () => modals.close(modalId),
     });
-  }, [selectedFiles, handleClear, refresh]);
+  }, [selectedFiles, handleClear, refresh, t]);
 
   const handleDelete = useCallback(async () => {
     await deleteMultipleFiles(selectedFiles);
@@ -267,22 +271,24 @@ export default forwardRef<
 
   return (
     <>
-      <DashboardFileModal
-        open={!!currentFile}
-        setOpen={(open) => {
-          if (!open) setCurrent(null);
-        }}
-        file={currentFile}
-        user={id}
-        sequenced
-        onDelete={refresh}
-      />
+      <Suspense fallback={null}>
+        <DashboardFileModal
+          open={!!currentFile}
+          setOpen={(open) => {
+            if (!open) setCurrent(null);
+          }}
+          file={currentFile}
+          user={id}
+          sequenced
+          onDelete={refresh}
+        />
+      </Suspense>
 
       {selectedIds.size > 0 && (
         <Paper withBorder p='sm' mb='md'>
           <Group justify='space-between' align='center' wrap='nowrap'>
             <Text size='sm' fw={600}>
-              {selectedIds.size} selected
+              {t('actions.selected', { count: selectedIds.size })}
             </Text>
             <Group gap='xs'>
               <Button
@@ -291,7 +297,7 @@ export default forwardRef<
                 leftSection={<IconFolder size='1rem' />}
                 onClick={handleMove}
               >
-                Move
+                {t('actions.move.label')}
               </Button>
               <Button
                 size='compact-sm'
@@ -300,7 +306,7 @@ export default forwardRef<
                 leftSection={<IconTrash size='1rem' />}
                 onClick={handleDelete}
               >
-                Delete
+                {t('actions.delete.label')}
               </Button>
               <Button
                 size='compact-sm'
@@ -309,35 +315,34 @@ export default forwardRef<
                 leftSection={<IconArchive size='1rem' />}
                 onClick={() => setZipModalOpen(true)}
               >
-                Zip & Share
+                {t('actions.zip.label')}
               </Button>
               <Button size='compact-sm' variant='subtle' onClick={handleClear}>
-                Clear
+                {t('actions.clear')}
               </Button>
             </Group>
           </Group>
         </Paper>
       )}
 
-      <Modal opened={zipModalOpen} onClose={() => setZipModalOpen(false)} title='Zip & share' centered>
+      <Modal opened={zipModalOpen} onClose={() => setZipModalOpen(false)} title={t('zip.title')} centered>
         <Stack>
           <Text size='sm' c='dimmed'>
-            Create a zip archive from {selectedIds.size} selected file(s) and generate a shareable link. Saved
-            to the &ldquo;zip shares&rdquo; folder.
+            {t('zip.description', { count: selectedIds.size })}
           </Text>
           <TextInput
-            label='Zip file name'
-            description='Will be saved as a regular .zip file.'
+            label={t('zip.nameLabel')}
+            description={t('zip.nameDescription')}
             value={zipName}
             onChange={(e) => setZipName(e.currentTarget.value)}
             placeholder='my-files.zip'
           />
           <Group justify='right' mt='md'>
             <Button variant='default' onClick={() => setZipModalOpen(false)}>
-              Cancel
+              {t('zip.cancel')}
             </Button>
             <Button onClick={handleZip} leftSection={<IconArchive size='1rem' />}>
-              Create & copy link
+              {t('zip.create')}
             </Button>
           </Group>
         </Stack>
@@ -408,7 +413,7 @@ export default forwardRef<
             <Stack>
               <Group>
                 <IconFilesOff size='2rem' />
-                <Title order={2}>No files found</Title>
+                <Title order={2}>{t('views.noFiles')}</Title>
               </Group>
               {!id && (
                 <Button
@@ -418,7 +423,7 @@ export default forwardRef<
                   component={Link}
                   to='/dashboard/upload/file'
                 >
-                  Upload a file
+                  {t('views.uploadFile')}
                 </Button>
               )}
             </Stack>
@@ -429,26 +434,26 @@ export default forwardRef<
       {infinite ? (
         <div ref={loadMoreRef} style={{ minHeight: 1 }}>
           <Group justify='space-between' align='center' mt='md'>
-            <Text size='sm'>{`${data.length} / ${totalRecords} files`}</Text>
+            <Text size='sm'>{t('views.infinite', { loaded: data.length, total: totalRecords })}</Text>
 
             {infiniteQuery.isLoadingMore ? (
               <Text size='sm' c='dimmed'>
-                Loading more...
+                {t('views.loadingMore')}
               </Text>
             ) : infiniteQuery.hasMore ? (
               <Text size='sm' c='dimmed'>
-                Scroll to load more
+                {t('views.scrollMore')}
               </Text>
             ) : (
               <Text size='sm' c='dimmed'>
-                All files loaded
+                {t('views.allLoaded')}
               </Text>
             )}
           </Group>
         </div>
       ) : (
         <Group justify='space-between' align='center' mt='md'>
-          <Text size='sm'>{`${from} - ${to} / ${totalRecords} files`}</Text>
+          <Text size='sm'>{t('views.pagination', { from, to, total: totalRecords })}</Text>
 
           <Group gap='sm'>
             <Select

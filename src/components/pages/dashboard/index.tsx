@@ -3,6 +3,7 @@ import FolderBookmarksBar from '@/components/folders/FolderBookmarksBar';
 import DropUploadOverlay from '@/components/upload/DropUploadOverlay';
 import { GridSizeSwitcher } from '@/components/GridTableSwitcher';
 import Stat from '@/components/Stat';
+import SafeTrans from '@/components/SafeTrans';
 import type { Response } from '@/lib/api/response';
 import { bytes } from '@/lib/bytes';
 import useLogin from '@/lib/client/hooks/useLogin';
@@ -31,7 +32,8 @@ import {
   IconStarFilled,
   IconX,
 } from '@tabler/icons-react';
-import { lazy, Suspense, useState, useRef } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { type FilesGridViewRef } from '@/components/pages/files/views/FilesGridView';
@@ -40,8 +42,9 @@ const ActivityChart = lazy(() => import('./parts/ActivityChart'));
 const FilesGridView = lazy(() => import('@/components/pages/files/views/FilesGridView'));
 
 export default function DashboardHome() {
+  const { t } = useTranslation('dashboard');
   const { user } = useLogin();
-  const { homeShowActivity, homeShowTypes } = useSettingsStore((state) => state.settings);
+  const { homeShowActivity, homeShowTypes, homeShowRecents } = useSettingsStore((state) => state.settings);
   const { data: stats, isLoading: statsLoading } = useSWR<Response['/api/user/stats']>('/api/user/stats');
 
   const [search, setSearch] = useState('');
@@ -55,75 +58,104 @@ export default function DashboardHome() {
       <DropUploadOverlay folderId={folderId} onUploaded={() => filesRef.current?.refresh()} />
 
       <Title>
-        Welcome back, <b>{user?.username}</b>
+        <SafeTrans
+          t={t}
+          i18nKey='welcome'
+          values={{ username: user?.username ?? '' }}
+          components={{ b: <b /> }}
+        />
       </Title>
 
       <Skeleton visible={statsLoading} animate>
         <Text size='sm' c='dimmed'>
-          You have <b>{statsLoading ? '...' : stats?.filesUploaded}</b> files uploaded.
+          <SafeTrans
+            t={t}
+            i18nKey='filesUploaded'
+            values={{ files: statsLoading ? '...' : stats?.filesUploaded }}
+            components={{ b: <b /> }}
+          />
         </Text>
       </Skeleton>
 
-      <Suspense
-        fallback={
-          <Paper radius='md' withBorder p='md' mt='lg'>
-            <Skeleton height={24} width={180} mb='xs' animate />
-            <Skeleton height={260} mt='md' animate />
-          </Paper>
-        }
-      >
-        <Group mt='md' mb='xs' wrap='nowrap' style={{ alignItems: 'center' }}>
-          <Title order={2}>Files</Title>
+      {homeShowRecents && (
+        <Suspense
+          fallback={
+            <Paper radius='md' withBorder p='md' mt='lg'>
+              <Skeleton height={24} width={180} mb='xs' animate />
+              <Skeleton height={260} mt='md' animate />
+            </Paper>
+          }
+        >
+          <Group mt='md' mb='xs' wrap='nowrap' style={{ alignItems: 'center' }}>
+            <Title order={2}>{t('recents.title')}</Title>
+            <Button
+              variant='outline'
+              size='compact-xs'
+              component={Link}
+              to='/dashboard/files'
+              leftSection={<IconFiles size='1rem' />}
+            >
+              {t('recents.viewAll')}
+            </Button>
 
-          <TextInput
-            placeholder='Search files by name...'
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            leftSection={<IconSearch size='1rem' />}
-            rightSection={
-              search ? (
-                <ActionIcon variant='subtle' size='xs' onClick={() => setSearch('')}>
-                  <IconX size='1rem' />
-                </ActionIcon>
-              ) : null
-            }
-            size='sm'
-            w={260}
-            variant='filled'
-          />
+            <TextInput
+              placeholder={t('search.placeholder')}
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              leftSection={<IconSearch size='1rem' />}
+              rightSection={
+                search ? (
+                  <ActionIcon variant='subtle' size='xs' onClick={() => setSearch('')}>
+                    <IconX size='1rem' />
+                  </ActionIcon>
+                ) : null
+              }
+              size='sm'
+              w={260}
+              variant='filled'
+            />
 
-          <FolderBookmarksBar folderId={folderId} onChange={setFolderId} />
+            <FolderBookmarksBar folderId={folderId} onChange={setFolderId} />
 
-          <GridSizeSwitcher />
-        </Group>
+            <GridSizeSwitcher />
+          </Group>
 
-        <FilesGridView ref={filesRef} search={search} folderId={folderId ?? undefined} />
-      </Suspense>
+          <FilesGridView ref={filesRef} search={search} folderId={folderId ?? undefined} />
+        </Suspense>
+      )}
 
       {user?.quota && (user.quota.maxBytes || user.quota.maxFiles) ? (
         <Text size='sm' c='dimmed'>
           {user.quota.filesQuota === 'BY_BYTES' ? (
-            <>
-              You have used <b>{statsLoading ? '...' : bytes(stats!.storageUsed)}</b> out of{' '}
-              <b>{user.quota.maxBytes}</b> of storage
-            </>
+            <SafeTrans
+              t={t}
+              i18nKey='quota.bytes'
+              values={{ used: statsLoading ? '...' : bytes(stats!.storageUsed), max: user.quota.maxBytes }}
+              components={{ b: <b /> }}
+            />
           ) : (
-            <>
-              You have uploaded <b>{statsLoading ? '...' : stats?.filesUploaded}</b> files out of{' '}
-              <b>{user.quota.maxFiles}</b> files allowed.
-            </>
+            <SafeTrans
+              t={t}
+              i18nKey='quota.files'
+              values={{ files: statsLoading ? '...' : stats?.filesUploaded, max: user.quota.maxFiles }}
+              components={{ b: <b /> }}
+            />
           )}
         </Text>
       ) : null}
       {user?.quota && user.quota.maxUrls ? (
         <Text size='sm' c='dimmed'>
-          You have created <b>{statsLoading ? '...' : stats?.urlsCreated}</b> links out of{' '}
-          <b>{user.quota.maxUrls}</b> links allowed.
+          <SafeTrans
+            t={t}
+            i18nKey='quota.urls'
+            values={{ urls: statsLoading ? '...' : stats?.urlsCreated, max: user.quota.maxUrls }}
+            components={{ b: <b /> }}
+          />
         </Text>
       ) : null}
 
       <Group mt='md' style={{ alignItems: 'center' }}>
-        <Title order={2}>Stats</Title>
+        <Title order={2}>{t('stats.title')}</Title>
 
         {(!config.features?.metrics?.adminOnly || isAdministrator(user?.role)) && (
           <Button
@@ -133,13 +165,13 @@ export default function DashboardHome() {
             to='/dashboard/metrics'
             leftSection={<IconGraphFilled size='1rem' />}
           >
-            View instance metrics
+            {t('stats.viewMetrics')}
           </Button>
         )}
       </Group>
 
       <Text size='sm' c='dimmed' mb='xs'>
-        These statistics are based on your uploads only.
+        {t('stats.description')}
       </Text>
 
       {statsLoading ? (
@@ -150,15 +182,19 @@ export default function DashboardHome() {
         </SimpleGrid>
       ) : stats ? (
         <SimpleGrid cols={{ base: 1, md: 2, lg: 4 }} spacing={{ base: 'sm', md: 'md' }}>
-          <Stat Icon={IconFiles} title='Files uploaded' value={stats.filesUploaded} />
-          <Stat Icon={IconStarFilled} title='Favorite files' value={stats.favoriteFiles} />
-          <Stat Icon={IconDeviceSdCard} title='Storage used' value={bytes(stats.storageUsed)} />
-          <Stat Icon={IconDeviceSdCard} title='Average storage used' value={bytes(stats.avgStorageUsed)} />
-          <Stat Icon={IconEyeFilled} title='File views' value={stats.views} />
-          <Stat Icon={IconEyeFilled} title='Average file views' value={Math.round(stats.avgViews)} />
+          <Stat Icon={IconFiles} title={t('stats.filesUploaded')} value={stats!.filesUploaded} />
+          <Stat Icon={IconStarFilled} title={t('stats.favoriteFiles')} value={stats!.favoriteFiles} />
+          <Stat Icon={IconDeviceSdCard} title={t('stats.storageUsed')} value={bytes(stats!.storageUsed)} />
+          <Stat
+            Icon={IconDeviceSdCard}
+            title={t('stats.avgStorageUsed')}
+            value={bytes(stats!.avgStorageUsed)}
+          />
+          <Stat Icon={IconEyeFilled} title={t('stats.fileViews')} value={stats!.views} />
+          <Stat Icon={IconEyeFilled} title={t('stats.avgFileViews')} value={Math.round(stats!.avgViews)} />
 
-          <Stat Icon={IconLink} title='Links created' value={stats.urlsCreated} />
-          <Stat Icon={IconLink} title='Total link views' value={Math.round(stats.urlViews)} />
+          <Stat Icon={IconLink} title={t('stats.linksCreated')} value={stats!.urlsCreated} />
+          <Stat Icon={IconLink} title={t('stats.linkViews')} value={Math.round(stats!.urlViews)} />
         </SimpleGrid>
       ) : null}
 
@@ -181,8 +217,8 @@ export default function DashboardHome() {
             <Table highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>File Type</Table.Th>
-                  <Table.Th>Count</Table.Th>
+                  <Table.Th>{t('fileTypes.columns.type')}</Table.Th>
+                  <Table.Th>{t('fileTypes.columns.count')}</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -207,15 +243,15 @@ export default function DashboardHome() {
       ) : stats && Object.keys(stats.sortTypeCount).length !== 0 && homeShowTypes ? (
         <>
           <Title order={3} mt='lg' mb='xs'>
-            File types
+            {t('fileTypes.title')}
           </Title>
           <Paper withBorder my='md'>
             <ScrollArea.Autosize mah={400} type='auto'>
               <Table highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>File Type</Table.Th>
-                    <Table.Th>Count</Table.Th>
+                    <Table.Th>{t('fileTypes.columns.type')}</Table.Th>
+                    <Table.Th>{t('fileTypes.columns.count')}</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>

@@ -6,7 +6,7 @@ import { log } from '@/lib/logger';
 import { userMiddleware } from '@/server/middleware/user';
 import { getSession } from '@/server/session';
 import typedPlugin from '@/server/typedPlugin';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, getColumns, ne } from 'drizzle-orm';
 import z from 'zod';
 
 export type ApiUserSessionsResponse = {
@@ -14,6 +14,11 @@ export type ApiUserSessionsResponse = {
   other: UserSession[];
 };
 const logger = log('api').c('user').c('sessions');
+const {
+  oauthProvider: _oauthProvider,
+  oidcIdToken: _oidcIdToken,
+  ...sessionColumns
+} = getColumns(userSessions);
 
 export const PATH = '/api/user/sessions';
 export default typedPlugin(
@@ -72,7 +77,10 @@ export default typedPlugin(
           await db
             .delete(userSessions)
             .where(and(eq(userSessions.userId, req.user.id), ne(userSessions.id, currentSession.sessionId!)));
-          const sessions = await db.select().from(userSessions).where(eq(userSessions.userId, req.user.id));
+          const sessions = await db
+            .select(sessionColumns)
+            .from(userSessions)
+            .where(eq(userSessions.userId, req.user.id));
 
           logger.info('user logged out all logged in sessions', {
             user: req.user.username,
@@ -90,7 +98,10 @@ export default typedPlugin(
         await db
           .delete(userSessions)
           .where(and(eq(userSessions.userId, req.user.id), eq(userSessions.id, req.body.sessionId!)));
-        const sessions = await db.select().from(userSessions).where(eq(userSessions.userId, req.user.id));
+        const sessions = await db
+          .select(sessionColumns)
+          .from(userSessions)
+          .where(eq(userSessions.userId, req.user.id));
 
         logger.info('user logged out of session', {
           user: req.user.username,

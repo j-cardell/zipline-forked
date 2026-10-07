@@ -8,20 +8,27 @@ export function findProvider<T extends { provider: OAuthProviderType }>(
 }
 
 export async function fetchUserInfo({ userInfoUrl, accessToken }: OAuthUserInfoOptions): Promise<any | null> {
-  const res = await fetch(userInfoUrl!, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  try {
+    const res = await fetch(userInfoUrl!, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    });
 
-  if (!res.ok) return null;
+    if (!res.ok) return null;
 
-  return res.json();
+    const json = await res.json();
+    if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+
+    return json;
+  } catch {
+    return null;
+  }
 }
 
 export type OAuthOptions = {
   clientId: string;
   origin: string;
   state?: string;
-  redirectUri: string;
+  redirectUri?: string | null;
 
   authorizeUrl?: string;
 
@@ -33,7 +40,14 @@ export type OAuthUserInfoOptions = {
   userInfoUrl?: string;
 };
 
+export type OAuthLogoutOptions = {
+  endSessionUrl: string;
+  clientId: string;
+  postLogoutRedirectUri: string;
+  idToken?: string | null;
+};
+
 export { discordAuthorizeURL, discordUser } from './discord';
 export { githubAuthorizeURL, githubUser } from './github';
 export { googleAuthorizeURL, googleUser } from './google';
-export { oidcAuthorizeURL, oidcUser } from './oidc';
+export { oidcAuthorizeURL, oidcLogoutURL, oidcUser } from './oidc';

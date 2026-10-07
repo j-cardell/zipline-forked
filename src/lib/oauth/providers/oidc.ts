@@ -1,5 +1,5 @@
 import { ApiError } from '@/lib/api/errors';
-import { type OAuthOptions, type OAuthUserInfoOptions, fetchUserInfo } from '.';
+import { type OAuthOptions, type OAuthUserInfoOptions, type OAuthLogoutOptions, fetchUserInfo } from '.';
 
 export function oidcAuthorizeURL({
   authorizeUrl,
@@ -29,4 +29,20 @@ export function oidcAuthorizeURL({
 
 export function oidcUser(options: OAuthUserInfoOptions) {
   return fetchUserInfo(options);
+}
+
+export function oidcLogoutURL({
+  endSessionUrl,
+  clientId,
+  postLogoutRedirectUri,
+  idToken,
+}: OAuthLogoutOptions): string {
+  const u = new URL(endSessionUrl);
+
+  u.searchParams.set('client_id', clientId);
+  u.searchParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
+
+  if (idToken) u.searchParams.set('id_token_hint', idToken);
+
+  return u.toString();
 }

@@ -9,7 +9,10 @@ import { generateOAuthState } from '@/lib/oauth/state';
 import { OAuthQuery, OAuthResponse } from '@/server/plugins/oauth';
 import typedPlugin from '@/server/typedPlugin';
 
-async function oidcOauth({ code, host, state, session }: OAuthQuery, logger: Logger): Promise<OAuthResponse> {
+async function oidcOauth(
+  { code, host, state, session, pkceVerifier }: OAuthQuery,
+  logger: Logger,
+): Promise<OAuthResponse> {
   if (!config.features.oauthRegistration) throw new ApiError(3016);
 
   const { oidc: oidcEnabled } = enabled(config);
@@ -28,18 +31,14 @@ async function oidcOauth({ code, host, state, session }: OAuthQuery, logger: Log
         clientId: config.oauth.oidc.clientId!,
         origin: `${config.core.returnHttpsUrls ? 'https' : 'http'}://${host}`,
         state: oauthState,
-        redirectUri: config.oauth.oidc.redirectUri!,
+        redirectUri: config.oauth.oidc.redirectUri,
         authorizeUrl: config.oauth.oidc.authorizeUrl!,
         codeChallenge,
       }),
     );
   }
 
-  const pkceVerifier = session.pkceVerifier;
-  if (pkceVerifier) {
-    delete session.pkceVerifier;
-    await session.save();
-  }
+  if (!pkceVerifier) throw new ApiError(1064);
 
   const body = new URLSearchParams({
     client_id: config.oauth.oidc.clientId!,
@@ -49,13 +48,7 @@ async function oidcOauth({ code, host, state, session }: OAuthQuery, logger: Log
     redirect_uri:
       config.oauth.oidc.redirectUri ??
       `${config.core.returnHttpsUrls ? 'https' : 'http'}://${host}/api/auth/oauth/oidc`,
-  });
-  if (pkceVerifier) {
-    body.set('code_verifier', pkceVerifier);
-  }
-
-  logger.debug('oidc oauth request', {
-    body: body.toString(),
+    code_verifier: pkceVerifier,
   });
 
   const res = await fetch(config.oauth.oidc.tokenUrl!, {
@@ -67,28 +60,35 @@ async function oidcOauth({ code, host, state, session }: OAuthQuery, logger: Log
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    logger.debug('oidc oauth failed with a non 200 status code', { status: res.status, text });
+    logger.debug('oidc oauth failed with a non 200 status code', { status: res.status });
 
     throw new ApiError(6004);
   }
 
-  const json = await res.json();
-  if (!json.access_token) throw new ApiError(6005);
+  const json = await res.json().catch(() => null);
+  if (!json || typeof json !== 'object' || json.error) throw new ApiError(6008);
+  if (typeof json.access_token !== 'string' || !json.access_token) throw new ApiError(6005);
 
   const userJson = await oidcUser({
     accessToken: json.access_token,
     userInfoUrl: config.oauth.oidc.userinfoUrl!,
   });
-  if (!userJson) throw new ApiError(6007);
+  if (!userJson || typeof userJson.sub !== 'string' || !userJson.sub) throw new ApiError(6007);
 
   logger.debug('user', { userinfo: userJson });
 
   return {
     access_token: json.access_token,
-    refresh_token: json.refresh_token || null,
-    username:
-      userJson.preferred_username ?? userJson.name ?? userJson.given_name ?? userJson.email ?? userJson.sub,
+    id_token: typeof json.id_token === 'string' ? json.id_token : undefined,
+    refresh_token:
+      typeof json.refresh_token === 'string' && json.refresh_token ? json.refresh_token : undefined,
+    username: [
+      userJson.preferred_username,
+      userJson.name,
+      userJson.given_name,
+      userJson.email,
+      userJson.sub,
+    ].find((name) => typeof name === 'string' && name.trim()),
     user_id: userJson.sub,
     avatar: await fetchToDataURL(userJson.picture ?? null),
   };

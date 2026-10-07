@@ -1,6 +1,7 @@
 import FolderComboboxOptions from '@/components/folders/FolderComboboxOptions';
 import { useFolders } from '@/lib/client/hooks/useFolders';
 import { useSettingsStore } from '@/lib/client/store/settings';
+import i18n from '@/lib/i18n';
 import type { File } from '@/lib/db/models/file';
 import { buildFolderHierarchy } from '@/lib/folderHierarchy';
 import { Box, Combobox, InputBase, Menu, ScrollArea, Text, useCombobox } from '@mantine/core';
@@ -21,6 +22,7 @@ import {
   IconTrashFilled,
 } from '@tabler/icons-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   addToFolder,
   copyFile,
@@ -42,13 +44,13 @@ const stop = (fn: () => void) => (event: React.MouseEvent) => {
 function openCreateFolderModal(file: File) {
   modals.openConfirmModal({
     modalId: 'file-context-create-folder',
-    title: 'Create folder',
+    title: i18n.t('file:createFolderModal.title'),
     centered: true,
     children: (
       <InputBase
         id='file-context-new-folder'
-        label='Folder name'
-        placeholder='My folder'
+        label={i18n.t('file:createFolderModal.name.label')}
+        placeholder={i18n.t('file:createFolderModal.name.placeholder')}
         data-autofocus
         onKeyDown={(event) => {
           if (event.key !== 'Enter') return;
@@ -59,7 +61,7 @@ function openCreateFolderModal(file: File) {
         }}
       />
     ),
-    labels: { confirm: 'Create', cancel: 'Cancel' },
+    labels: { confirm: i18n.t('common:actions.create'), cancel: i18n.t('common:actions.cancel') },
     onConfirm: () => {
       const input = document.getElementById('file-context-new-folder') as HTMLInputElement | null;
       const name = input?.value?.trim();
@@ -83,6 +85,7 @@ export default function FileContextMenu({
   onDelete?: () => void;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation(['file', 'common']);
   const [opened, setOpened] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [editOpen, setEditOpen] = useState(false);
@@ -198,11 +201,11 @@ export default function FileContextMenu({
 
           {onView && (
             <Menu.Item leftSection={<IconEye size='1rem' />} onClick={stop(run(onView))}>
-              Open
+              {t('common:actions.open')}
             </Menu.Item>
           )}
           <Menu.Item leftSection={<IconExternalLink size='1rem' />} onClick={stop(run(() => viewFile(file)))}>
-            Open in new tab
+            {t('contextMenu.openInNewTab')}
           </Menu.Item>
 
           <Menu.Divider />
@@ -211,19 +214,19 @@ export default function FileContextMenu({
             leftSection={<IconCopy size='1rem' />}
             onClick={stop(run(() => copyFile(file, clipboard)))}
           >
-            Copy link
+            {t('contextMenu.copyLink')}
           </Menu.Item>
           <Menu.Item
             leftSection={<IconClipboardTypography size='1rem' />}
             onClick={stop(run(() => copyFile(file, clipboard, true)))}
           >
-            Copy raw link
+            {t('contextMenu.copyRawLink')}
           </Menu.Item>
           <Menu.Item leftSection={<IconShare size='1rem' />} onClick={stop(run(() => setShareOpen(true)))}>
             Share
           </Menu.Item>
           <Menu.Item leftSection={<IconDownload size='1rem' />} onClick={stop(run(() => downloadFile(file)))}>
-            Download
+            {t('common:actions.download')}
           </Menu.Item>
 
           {!reduce && (
@@ -240,7 +243,7 @@ export default function FileContextMenu({
                 }
                 onClick={stop(run(() => favoriteFile(file)))}
               >
-                {file.favorite ? 'Unfavorite' : 'Favorite'}
+                {file.favorite ? t('contextMenu.unfavorite') : t('contextMenu.favorite')}
               </Menu.Item>
 
               {file.folderId ? (
@@ -248,13 +251,13 @@ export default function FileContextMenu({
                   leftSection={<IconFolderMinus size='1rem' color='var(--mantine-color-red-5)' />}
                   onClick={stop(run(() => removeFromFolder(file)))}
                 >
-                  Remove from folder
+                  {t('contextMenu.removeFromFolder')}
                 </Menu.Item>
               ) : (
                 <Menu.Sub openDelay={100} closeDelay={200}>
                   <Menu.Sub.Target>
                     <Menu.Sub.Item leftSection={<IconFolderSymlink size='1rem' />}>
-                      Move to folder
+                      {t('contextMenu.moveToFolder')}
                     </Menu.Sub.Item>
                   </Menu.Sub.Target>
                   <Menu.Sub.Dropdown>
@@ -267,7 +270,7 @@ export default function FileContextMenu({
                         <Combobox.Target>
                           <InputBase
                             size='xs'
-                            placeholder='Search folders...'
+                            placeholder={t('contextMenu.searchFolders')}
                             value={folderSearch}
                             onChange={(event) => {
                               folderCombobox.openDropdown();
@@ -289,7 +292,7 @@ export default function FileContextMenu({
                                 !folders?.some((f) => f.name === folderSearch.trim()) &&
                                 folderSearch.trim().length > 0 ? (
                                   <Combobox.Option value='$create'>
-                                    + Create &quot;{folderSearch.trim()}&quot;
+                                    {t('contextMenu.createNamedFolder', { name: folderSearch.trim() })}
                                   </Combobox.Option>
                                 ) : null
                               }
@@ -297,7 +300,7 @@ export default function FileContextMenu({
                             {!filteredFolders.length && !folderSearch.trim() && (
                               <Combobox.Empty px='xs' py='sm'>
                                 <Text size='xs' c='dimmed'>
-                                  No folders yet
+                                  {t('contextMenu.noFolders')}
                                 </Text>
                               </Combobox.Empty>
                             )}
@@ -306,7 +309,7 @@ export default function FileContextMenu({
                       </Combobox>
 
                       <Menu.Item mt={4} onClick={stop(() => openCreateFolderModal(file))}>
-                        + Create new folder
+                        {t('contextMenu.createNewFolder')}
                       </Menu.Item>
                     </Box>
                   </Menu.Sub.Dropdown>
@@ -317,7 +320,7 @@ export default function FileContextMenu({
                 leftSection={<IconPencil size='1rem' />}
                 onClick={stop(run(() => setEditOpen(true)))}
               >
-                Edit details
+                {t('contextMenu.editDetails')}
               </Menu.Item>
 
               <Menu.Divider />
@@ -333,7 +336,7 @@ export default function FileContextMenu({
                   ),
                 )}
               >
-                Delete
+                {t('common:actions.delete')}
               </Menu.Item>
             </>
           )}

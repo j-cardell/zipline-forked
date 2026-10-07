@@ -22,9 +22,11 @@ import {
 } from '@mantine/core';
 import { Dropzone } from '@mantine/dropzone';
 import { useClipboard, useColorScheme } from '@mantine/hooks';
-import { notifications } from '@mantine/notifications';
+import { notifications, showNotification } from '@mantine/notifications';
 import { IconDeviceSdCard, IconFiles, IconTrashFilled, IconUpload, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import SafeTrans from '@/components/SafeTrans';
 import { Link } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
 import FolderSelectModal from '@/components/folders/FolderSelectModal';
@@ -58,6 +60,7 @@ function promptForFolder(_current?: string | null): Promise<string | undefined |
 }
 
 export default function UploadFile({ title, folder }: { title?: string; folder?: string }) {
+  const { t } = useTranslation('upload');
   const theme = useMantineTheme();
   const colorScheme = useColorScheme();
   const clipboard = useClipboard();
@@ -79,7 +82,6 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
   const hiddenFiles = Math.max(0, files.length - visibleFiles.length);
 
   const aggSize = useCallback(() => files.reduce((acc, file) => acc + file.size, 0), [files]);
-
   const handleBeforeUnload = (e: BeforeUnloadEvent) => {
     if (files.length > 0) {
       e.preventDefault();
@@ -92,6 +94,31 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [files.length]);
+
+  const handlePaste = useCallback(
+    (e: ClipboardEvent) => {
+      if (!e.clipboardData) return;
+      for (let i = 0; i !== e.clipboardData.items.length; ++i) {
+        if (!e.clipboardData.items[i].type.startsWith('image')) return;
+        const blob = e.clipboardData.items[i].getAsFile();
+        if (!blob) return;
+        setFiles((prev) => [...prev, blob]);
+        setVisibleCount(initialVisible);
+        showNotification({
+          message: t('file.notifications.pasted.message', { name: blob.name }),
+          color: 'blue',
+        });
+      }
+    },
+    [t, initialVisible],
+  );
+
+  useEffect(() => {
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [handlePaste]);
 
   const upload = async () => {
     const maxBytes = config.chunks.enabled && bytes(config.chunks.max);
@@ -106,15 +133,16 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
       const size = normalUploads.reduce((acc, file) => acc + file.size, 0);
       if (size > bytes(config.files.maxFileSize)) {
         notifications.show({
-          title: 'Upload may fail',
+          title: t('file.notifications.mayFail.title'),
           color: 'yellow',
           icon: <IconDeviceSdCard size='1rem' />,
           message: (
-            <>
-              The upload may fail because the total size of the files (that are not being partially uploaded)
-              you are trying to upload is <b>{bytes(size)}</b>, which is larger than the limit of{' '}
-              <b>{bytes(bytes(config.files.maxFileSize))}</b>
-            </>
+            <SafeTrans
+              t={t}
+              i18nKey='file.notifications.mayFail.message'
+              values={{ size: bytes(size), limit: bytes(bytes(config.files.maxFileSize)) }}
+              components={{ b: <b /> }}
+            />
           ),
         });
       }
@@ -153,7 +181,7 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
   return (
     <>
       <Group gap='sm'>
-        <Title order={1}>{title ?? 'Upload files'}</Title>
+        <Title order={1}>{title ?? t('file.title')}</Title>
 
         {!folder && (
           <Button
@@ -163,7 +191,7 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
             to='/dashboard/files'
             leftSection={<IconFiles size='1rem' />}
           >
-            Go to files
+            {t('actions.goToFiles')}
           </Button>
         )}
       </Group>
@@ -195,17 +223,26 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
 
           <div>
             <Text size='xl' inline>
-              Drag images here or click to select files
+              {t('file.dropzone.title')}
             </Text>
             <Text size='sm' inline mt='xs'>
-              Or <Kbd size='xs'>{isMac ? '⌘' : 'Ctrl'}</Kbd> + <Kbd size='xs'>V</Kbd> to paste images from
-              clipboard
+              <SafeTrans
+                t={t}
+                i18nKey='file.dropzone.paste'
+                values={{ mod: isMac ? '⌘' : 'Ctrl' }}
+                components={{ kbd: <Kbd size='xs' /> }}
+              />
             </Text>
             <Text size='sm' c='dimmed' inline mt={7}>
-              Attach as many files as you like, they will show up below to review before uploading.
+              {t('file.dropzone.description')}
             </Text>
             <Text size='sm' c='dimmed' mt={7}>
-              <b>{bytes(bytes(config.files.maxFileSize))}</b> limit per file
+              <SafeTrans
+                t={t}
+                i18nKey='file.dropzone.limit'
+                values={{ size: bytes(bytes(config.files.maxFileSize)) }}
+                components={{ b: <b /> }}
+              />
             </Text>
           </div>
         </Group>
@@ -224,7 +261,10 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
       <Collapse expanded={progress.speed > 0 && progress.remaining > 0}>
         <Paper withBorder p='xs'>
           <Text ta='center' size='sm'>
-            {bytes(progress.speed)}/s, {humanizeDuration(progress.remaining)} remaining
+            {t('file.progress.speed', {
+              speed: bytes(progress.speed),
+              remaining: humanizeDuration(progress.remaining),
+            })}
           </Text>
         </Paper>
       </Collapse>
@@ -232,7 +272,7 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
       <Collapse expanded={progress.percent === 100}>
         <Paper withBorder p='xs'>
           <Text ta='center' size='sm' c='yellow' fw={500}>
-            Finalizing upload(s)...
+            {t('file.progress.finalizing')}
           </Text>
         </Paper>
       </Collapse>
@@ -252,7 +292,7 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
       {hiddenFiles > 0 && (
         <Group justify='center' gap='xs' my='xs'>
           <Text size='sm' c='dimmed'>
-            {hiddenFiles} more file{hiddenFiles !== 1 && 's'} hidden{' '}
+            {t('file.hidden', { count: hiddenFiles })}{' '}
           </Text>
           <Button
             size='compact-sm'
@@ -260,16 +300,16 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
             disabled={dropLoading}
             onClick={() => setVisibleCount((prev) => Math.min(files.length, prev + initialVisible))}
           >
-            Show more
+            {t('file.showMore')}
           </Button>
-          <Tooltip label='This may cause performance issues if there are a lot of files' hidden={dropLoading}>
+          <Tooltip label={t('file.showAllTooltip')} hidden={dropLoading}>
             <Button
               size='compact-sm'
               variant='subtle'
               disabled={dropLoading}
               onClick={() => setVisibleCount(files.length)}
             >
-              Show all
+              {t('file.showAll')}
             </Button>
           </Tooltip>
         </Group>
@@ -286,7 +326,7 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
             setVisibleCount(initialVisible);
           }}
         >
-          Clear all
+          {t('actions.clearAll')}
         </Button>
         <Button
           variant='outline'
@@ -306,7 +346,7 @@ export default function UploadFile({ title, folder }: { title?: string; folder?:
           disabled={files.length === 0 || dropLoading}
           onClick={upload}
         >
-          Upload {files.length} file{files.length !== 1 && 's'} ({bytes(aggSize())})
+          {t('actions.upload', { count: files.length, size: bytes(aggSize()) })}
         </Button>
       </Group>
     </>

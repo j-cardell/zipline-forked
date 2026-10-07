@@ -17,6 +17,7 @@ import {
 import type { Icon } from '@tabler/icons-react';
 import { IconPlayerPlay, IconShieldLockFilled } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import fileIcon from '../fileIcon';
 import FileZoomModal from './FileZoomModal';
 import FullscreenFrame from './FullscreenFrame';
@@ -143,6 +144,7 @@ export default function DashboardFileType({
   compact?: boolean;
   fill?: boolean;
 }) {
+  const { t } = useTranslation('file');
   const disableMediaPreview = useSettingsStore((state) => state.settings.disableMediaPreview);
   const mediaAutoMuted = useSettingsStore((state) => state.settings.mediaAutoMuted);
 
@@ -169,18 +171,23 @@ export default function DashboardFileType({
   }, [zoomOpen]);
 
   if (disableMediaPreview && !show) {
-    return <Placeholder text={`Click to view file ${file.name}`} Icon={fileIcon(file.type)} />;
+    return <Placeholder text={t('preview.clickToView', { name: file.name })} Icon={fileIcon(file.type)} />;
   }
 
   if (db?.password === true && !show) {
-    return <Placeholder text={`Click to view protected ${file.name}`} Icon={IconShieldLockFilled} />;
+    return (
+      <Placeholder
+        text={t('preview.clickToViewProtected', { name: file.name })}
+        Icon={IconShieldLockFilled}
+      />
+    );
   }
 
   if (db?.password === true && show) {
     return (
       <Paper withBorder p='xs' style={{ cursor: 'pointer' }}>
         <Placeholder
-          text={`Click to view protected ${file.name}`}
+          text={t('preview.clickToViewProtected', { name: file.name })}
           Icon={IconShieldLockFilled}
           onClick={() => window.open(viewUrl!)}
         />
@@ -199,7 +206,7 @@ export default function DashboardFileType({
           <Box pos='relative' style={fill ? { width: '100%', height: '100%' } : undefined}>
             <MantineImage
               src={thumbnailUrl}
-              alt={file.name || 'Video thumbnail'}
+              alt={file.name || t('preview.videoThumbnailAlt')}
               fit={fill ? 'cover' : 'contain'}
               style={fill ? { width: '100%', height: '100%' } : { width: '100%' }}
             />
@@ -214,7 +221,9 @@ export default function DashboardFileType({
         );
       }
 
-      return <Placeholder text={`Click to play video ${file.name}`} Icon={fileIcon(file.type)} />;
+      return (
+        <Placeholder text={t('preview.clickToPlayVideo', { name: file.name })} Icon={fileIcon(file.type)} />
+      );
     }
 
     const video = (
@@ -250,7 +259,7 @@ export default function DashboardFileType({
         <MantineImage
           fit={fill ? 'cover' : 'contain'}
           src={fileUrl}
-          alt={file.name || 'Image'}
+          alt={file.name || t('preview.imageAlt')}
           style={fill ? { width: '100%', height: '100%' } : { width: '100%' }}
         />
       );
@@ -265,7 +274,7 @@ export default function DashboardFileType({
           allowZoom && setZoomOpen(true);
         }}
         src={fileUrl}
-        alt={file.name || 'Image'}
+        alt={file.name || t('preview.imageAlt')}
         fit='contain'
         style={{
           cursor: allowZoom ? 'zoom-in' : 'default',
@@ -285,7 +294,7 @@ export default function DashboardFileType({
           <FileZoomModal setOpen={setZoomOpen}>
             <MantineImage
               src={fileUrl}
-              alt={file.name || 'Image'}
+              alt={file.name || t('preview.imageAlt')}
               style={{
                 maxWidth: '95vw',
                 maxHeight: '95vh',
@@ -318,12 +327,15 @@ export default function DashboardFileType({
         src={fileUrl}
       />
     ) : (
-      <Placeholder text={`Click to play audio ${file.name}`} Icon={fileIcon(file.type)} />
+      <Placeholder text={t('preview.clickToPlayAudio', { name: file.name })} Icon={fileIcon(file.type)} />
     );
   }
 
   if (type === 'text') {
-    if (!show) return <Placeholder text={`Click to view text ${file.name}`} Icon={fileIcon(file.type)} />;
+    if (!show)
+      return (
+        <Placeholder text={t('preview.clickToViewText', { name: file.name })} Icon={fileIcon(file.type)} />
+      );
 
     if (fileContent.trim() === '') {
       return (
@@ -336,7 +348,7 @@ export default function DashboardFileType({
                   <Loader />
                 </Center>
                 <Text ta='center' mt='xs' c='dimmed'>
-                  Loading file...
+                  {t('preview.loading')}
                 </Text>
               </>
             ),
@@ -368,7 +380,7 @@ export default function DashboardFileType({
       </FullscreenFrame>
     ) : (
       <Placeholder
-        text={`Click to download asciinema cast ${file.name}`}
+        text={t('preview.clickToDownloadCast', { name: file.name })}
         Icon={fileIcon('application/x-asciicast')}
       />
     );
@@ -388,17 +400,18 @@ export default function DashboardFileType({
         <Pdf src={fileUrl} />
       )
     ) : (
-      <Placeholder text={`Click to view PDF ${file.name}`} Icon={fileIcon(file.type)} />
+      <Placeholder text={t('preview.clickToViewPdf', { name: file.name })} Icon={fileIcon(file.type)} />
     );
   }
 
-  if (!show) return <Placeholder text={`Click to view file ${file.name}`} Icon={fileIcon(file.type)} />;
+  if (!show)
+    return <Placeholder text={t('preview.clickToView', { name: file.name })} Icon={fileIcon(file.type)} />;
 
   return (
     <Paper withBorder p='xs' style={{ cursor: 'pointer' }}>
       <Placeholder
         onClick={() => window.open(fileUrl)}
-        text={`Click to view file ${file.name} in a new tab`}
+        text={t('preview.clickToViewInNewTab', { name: file.name })}
         Icon={fileIcon(file.type)}
       />
     </Paper>

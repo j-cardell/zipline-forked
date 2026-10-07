@@ -23,7 +23,7 @@ async function githubOauth(
       githubAuthorizeURL({
         clientId: config.oauth.github.clientId!,
         state: await generateOAuthState(session, state === 'link' ? 'link' : 'default'),
-        redirectUri: config.oauth.github.redirectUri!,
+        redirectUri: config.oauth.github.redirectUri,
         origin: `${config.core.returnHttpsUrls ? 'https' : 'http'}://${host}`,
       }),
     );
@@ -33,10 +33,9 @@ async function githubOauth(
     client_id: config.oauth.github.clientId!,
     client_secret: config.oauth.github.clientSecret!,
     code,
-  });
-
-  logger.debug('github oauth request', {
-    body: body.toString(),
+    redirect_uri:
+      config.oauth.github.redirectUri ??
+      `${config.core.returnHttpsUrls ? 'https' : 'http'}://${host}/api/auth/oauth/github`,
   });
 
   const res = await fetch('https://github.com/login/oauth/access_token', {
@@ -50,32 +49,41 @@ async function githubOauth(
 
   const isJson = res.headers.get('content-type')?.startsWith('application/json');
 
-  if (!isJson && !res.ok) throw new ApiError(6004);
+  if (!isJson || !res.ok) throw new ApiError(6004);
 
-  const json = await res.json();
+  const json = await res.json().catch(() => null);
+  if (!json || typeof json !== 'object') throw new ApiError(6008);
 
   if (json.error) {
     logger.error('failed to fetch access token', {
-      error: json.error_description ?? json.error_uri ?? json.error ?? 'unknown gh error',
+      error: json.error,
+      status: res.status,
     });
-    logger.debug('failed to fetch access token', { json, status: res.status });
 
     throw new ApiError(6008);
   }
 
-  if (!json.access_token) throw new ApiError(6005);
+  if (typeof json.access_token !== 'string' || !json.access_token) throw new ApiError(6005);
 
   const userJson = await githubUser({
     accessToken: json.access_token,
   });
-  if (!userJson) throw new ApiError(6007);
+  if (
+    !userJson ||
+    !Number.isSafeInteger(userJson.id) ||
+    userJson.id <= 0 ||
+    typeof userJson.login !== 'string' ||
+    !userJson.login
+  )
+    throw new ApiError(6007);
 
   logger.debug('user', { user: userJson });
 
   return {
     access_token: json.access_token,
-    refresh_token: json.refresh_token,
-    username: userJson.login ?? userJson.name,
+    refresh_token:
+      typeof json.refresh_token === 'string' && json.refresh_token ? json.refresh_token : undefined,
+    username: userJson.login,
     user_id: String(userJson.id),
     avatar: await fetchToDataURL(userJson.avatar_url),
   };

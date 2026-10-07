@@ -1,9 +1,11 @@
 import { ApiError } from '@/lib/api/errors';
+import { config } from '@/lib/config';
 import { db } from '@/lib/db';
 import { type OAuthProvider, oauthProviderSchema } from '@/lib/db/models/oauth';
 import { getUser } from '@/lib/db/models/user';
 import { oauthProviders, users } from '@/lib/db/schema';
 import { log } from '@/lib/logger';
+import enabled from '@/lib/oauth/enabled';
 import { userMiddleware } from '@/server/middleware/user';
 import typedPlugin from '@/server/typedPlugin';
 import { and, eq } from 'drizzle-orm';
@@ -46,21 +48,30 @@ export default typedPlugin(
         preHandler: [userMiddleware],
       },
       async (req, res) => {
-        const [creds] = await db
-          .select({ password: users.password })
-          .from(users)
-          .where(eq(users.id, req.user.id))
-          .limit(1);
-
-        if (!creds) throw new ApiError(9002);
-        const { password } = creds;
-
-        if (!req.user.oauthProviders.length) throw new ApiError(1030);
-        if (req.user.oauthProviders.length === 1 && !password) throw new ApiError(1043);
-
         const { provider } = req.body;
 
         const user = await db.transaction(async (tx) => {
+          const [creds] = await tx
+            .select({ password: users.password })
+            .from(users)
+            .where(eq(users.id, req.user.id))
+            .for('update');
+          if (!creds) throw new ApiError(9002);
+
+          const providers = await tx
+            .select({ provider: oauthProviders.provider })
+            .from(oauthProviders)
+            .where(eq(oauthProviders.userId, req.user.id));
+          if (!providers.some((linked) => linked.provider === provider)) throw new ApiError(1030);
+
+          const oauthEnabled = enabled(config);
+          const canLogin = providers.some(
+            (linked) =>
+              linked.provider !== provider &&
+              oauthEnabled[linked.provider.toLowerCase() as keyof typeof oauthEnabled],
+          );
+          if (!creds.password && !canLogin) throw new ApiError(1043);
+
           await tx
             .delete(oauthProviders)
             .where(and(eq(oauthProviders.userId, req.user.id), eq(oauthProviders.provider, provider)));

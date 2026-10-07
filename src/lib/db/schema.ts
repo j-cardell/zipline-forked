@@ -146,6 +146,7 @@ export const zipline = pgTable(
     oauthOidcAuthorizeUrl: text(),
     oauthOidcTokenUrl: text(),
     oauthOidcUserinfoUrl: text(),
+    oauthOidcEndSessionUrl: text(),
     oauthOidcRedirectUri: text(),
 
     mfaTotpEnabled: boolean().default(false).notNull(),
@@ -307,6 +308,8 @@ export const userSessions = pgTable(
     ua: text().notNull(),
     client: text().notNull(),
     device: text().notNull(),
+    oauthProvider: oauthProviderType(),
+    oidcIdToken: text(),
     userId: text()
       .notNull()
       .references(() => users.id, {
