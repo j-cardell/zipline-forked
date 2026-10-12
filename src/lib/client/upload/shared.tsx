@@ -7,7 +7,6 @@ import { useClipboard } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { IconClipboardCopy, IconExternalLink } from '@tabler/icons-react';
-import { Dispatch, SetStateAction } from 'react';
 import SafeTrans from '@/components/SafeTrans';
 import { Link } from 'react-router-dom';
 import { UploadProgress } from './useProgress';
@@ -21,8 +20,8 @@ export type UploadHeadersOptions = {
 
 export type UploadHandlers = {
   setProgress: (o: UploadProgress) => void;
-  setLoading: Dispatch<SetStateAction<boolean>>;
-  setFiles: Dispatch<SetStateAction<File[]>>;
+  setLoading: (loading: boolean) => void;
+  setFiles: (updater: File[] | ((prev: File[]) => File[])) => void;
 };
 
 export type UploadContextHandlers = UploadHandlers & {

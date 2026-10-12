@@ -47,8 +47,12 @@ export default function DashboardShares() {
   useEffect(() => {
     listUserShares()
       .then(setShares)
-      .catch((err: any) =>
-        notifications.show({ title: t('common:status.error'), message: err.message, color: 'red' }),
+      .catch((err) =>
+        notifications.show({
+          title: t('common:status.error'),
+          message: err instanceof Error ? err.message : String(err),
+          color: 'red',
+        }),
       )
       .finally(() => setLoading(false));
   }, [t]);

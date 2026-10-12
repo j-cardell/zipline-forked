@@ -49,9 +49,13 @@ export default function ShareFileModal({
         if (cancelled) return;
         setShares(data.shares);
       })
-      .catch((err: any) => {
+      .catch((err) => {
         if (cancelled) return;
-        notifications.show({ title: t('common:status.error'), message: err.message, color: 'red' });
+        notifications.show({
+          title: t('common:status.error'),
+          message: err instanceof Error ? err.message : String(err),
+          color: 'red',
+        });
       });
     return () => {
       cancelled = true;

@@ -23,7 +23,7 @@ import {
   useMantineTheme,
 } from '@mantine/core';
 import { useClipboard } from '@mantine/hooks';
-import { useModals, openModal, closeModal } from '@mantine/modals';
+import { useModals } from '@mantine/modals';
 import { showNotification } from '@mantine/notifications';
 import {
   IconAdjustments,
@@ -49,50 +49,17 @@ import {
   IconShare,
 } from '@tabler/icons-react';
 import type { TFunction } from 'i18next';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, NavigateFunction, Outlet, useLoaderData, useLocation, useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/shallow';
-import { useSWRConfig } from 'swr';
-import { dashboardLoader } from '../client/routes';
-import { bytes } from '@/lib/bytes';
+import { useGlobalPasteUpload } from '@/lib/client/upload/useGlobalPasteUpload';
 import { useUploadOptionsStore } from '@/lib/client/store/uploadOptions';
-import { uploadFiles } from '@/lib/client/upload/files';
-import { uploadPartialFiles } from '@/lib/client/upload/partial';
-import FolderSelectModal from './folders/FolderSelectModal';
+import { dashboardLoader } from '../client/routes';
 import ConfigProvider from './ConfigProvider';
 import LanguageSelect from './LanguageSelect';
 import VersionBadge from './VersionBadge';
 import { SETTINGS_EXTERNAL_LINKS } from './pages/serverSettings';
-
-function isTextField(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName.toLowerCase();
-  return tag === 'input' || tag === 'textarea' || target.isContentEditable;
-}
-
-function promptForFolder(title: string): Promise<string | undefined | null> {
-  return new Promise((resolve) => {
-    const id = openModal({
-      title,
-      size: 'lg',
-      centered: true,
-      children: (
-        <FolderSelectModal
-          onSelect={(folderId) => {
-            resolve(folderId);
-            closeModal(id);
-          }}
-          onCancel={() => {
-            resolve(null);
-            closeModal(id);
-          }}
-        />
-      ),
-      onClose: () => resolve(null),
-    });
-  });
-}
 
 type NavLinks = {
   label: string;
@@ -288,102 +255,13 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const logout = useLogout();
-  const { mutate: mutateCache } = useSWRConfig();
 
   const loaderData = useLoaderData<typeof dashboardLoader>();
   const config = loaderData.config;
 
-  const [options, ephemeral, clearEphemeral] = useUploadOptionsStore(
-    useShallow((state) => [state.options, state.ephemeral, state.clearEphemeral]),
-  );
+  const [options, ephemeral] = useUploadOptionsStore(useShallow((state) => [state.options, state.ephemeral]));
 
-  const uploadingRef = useRef(false);
-
-  const handleGlobalPaste = useCallback(
-    async (e: ClipboardEvent) => {
-      const path = location.pathname;
-      if (path.startsWith('/dashboard/admin') || path === '/dashboard/settings') return;
-
-      if (!e.clipboardData) return;
-
-      const pastedFiles: File[] = [];
-      let pastedText = '';
-
-      for (const item of Array.from(e.clipboardData.items)) {
-        const file = item.getAsFile();
-        if (file) {
-          pastedFiles.push(file);
-        } else if (item.kind === 'string' && item.type === 'text/plain') {
-          pastedText = e.clipboardData.getData('text/plain');
-        }
-      }
-
-      if (pastedFiles.length === 0 && !pastedText) return;
-
-      // If only text and user is focused in a text field, let native paste work
-      if (pastedFiles.length === 0 && isTextField(e.target)) return;
-
-      e.preventDefault();
-      if (uploadingRef.current) return;
-      uploadingRef.current = true;
-
-      const folderId = await promptForFolder(t('upload:paste.folder.title'));
-      if (folderId === null) {
-        uploadingRef.current = false;
-        return;
-      }
-
-      const files: File[] =
-        pastedFiles.length > 0
-          ? pastedFiles
-          : [
-              new File([new Blob([pastedText], { type: 'text/plain' })], 'pasted-snippet.txt', {
-                type: 'text/plain',
-              }),
-            ];
-
-      const maxBytes = config.chunks.enabled && bytes(config.chunks.max);
-      const partialUploads = maxBytes ? files.filter((file) => file.size >= maxBytes) : [];
-      const normalUploads = maxBytes ? files.filter((file) => file.size < maxBytes) : files;
-
-      try {
-        if (normalUploads.length > 0) {
-          await uploadFiles(normalUploads, {
-            setFiles: () => {},
-            setLoading: () => {},
-            setProgress: () => {},
-            clipboard,
-            clearEphemeral,
-            options,
-            ephemeral,
-            folder: folderId ?? undefined,
-          });
-        }
-        if (partialUploads.length > 0) {
-          await uploadPartialFiles(partialUploads, {
-            setFiles: () => {},
-            setLoading: () => {},
-            setProgress: () => {},
-            options,
-            ephemeral,
-            config,
-            folder: folderId ?? undefined,
-          });
-        }
-      } finally {
-        uploadingRef.current = false;
-        mutateCache(() => true, undefined, { revalidate: true });
-      }
-    },
-    [clipboard, clearEphemeral, config, ephemeral, location.pathname, mutateCache, options, t],
-  );
-
-  useEffect(() => {
-    document.addEventListener('paste', handleGlobalPaste);
-    return () => {
-      document.removeEventListener('paste', handleGlobalPaste);
-    };
-  }, [handleGlobalPaste]);
+  useGlobalPasteUpload({ config, options, ephemeral });
 
   const { user, mutate } = useLogin();
   const { avatar } = useAvatar();
