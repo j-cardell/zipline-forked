@@ -29,8 +29,10 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function DashboardShares() {
+  const { t } = useTranslation(['file', 'common']);
   const [shares, setShares] = useState<
     (Share & {
       file: { id: string; name: string; type: string; size: number; thumbnail: { path: string } | null };
@@ -45,23 +47,33 @@ export default function DashboardShares() {
   useEffect(() => {
     listUserShares()
       .then(setShares)
-      .catch((err) => notifications.show({ title: 'Error', message: err.message, color: 'red' }))
+      .catch((err: any) =>
+        notifications.show({ title: t('common:status.error'), message: err.message, color: 'red' }),
+      )
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   const revoke = async (shareId: string) => {
     try {
       await revokeUserShare(shareId);
       setShares((prev) => prev.filter((s) => s.id !== shareId));
-      notifications.show({ title: 'Revoked', message: 'Share link revoked', color: 'green' });
+      notifications.show({
+        title: t('shares.revoked.title'),
+        message: t('shares.revoked.message'),
+        color: 'green',
+      });
     } catch (err: any) {
-      notifications.show({ title: 'Error', message: err.message, color: 'red' });
+      notifications.show({ title: t('common:status.error'), message: err.message, color: 'red' });
     }
   };
 
   const copy = (url: string) => {
     clipboard.copy(url);
-    notifications.show({ title: 'Copied', message: 'Share link copied', color: 'green' });
+    notifications.show({
+      title: t('shares.copied.title'),
+      message: t('shares.copied.message'),
+      color: 'green',
+    });
   };
 
   const shareUrl = (token: string, name: string) =>
@@ -114,11 +126,11 @@ export default function DashboardShares() {
 
   return (
     <Stack gap='md'>
-      <Title>Shares</Title>
+      <Title>{t('shares.title')}</Title>
 
       <Group wrap='nowrap'>
         <TextInput
-          placeholder='Filter by name, type, or token...'
+          placeholder={t('shares.filterPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.currentTarget.value)}
           leftSection={<IconSearch size='1rem' />}
@@ -136,15 +148,15 @@ export default function DashboardShares() {
           value={sortBy}
           onChange={(val) => setSortBy((val as any) ?? 'created')}
           data={[
-            { value: 'created', label: 'Created' },
-            { value: 'name', label: 'Name' },
-            { value: 'views', label: 'Views' },
-            { value: 'expires', label: 'Expires' },
+            { value: 'created', label: t('shares.sort.created') },
+            { value: 'name', label: t('shares.sort.name') },
+            { value: 'views', label: t('shares.sort.views') },
+            { value: 'expires', label: t('shares.sort.expires') },
           ]}
           w={140}
         />
 
-        <Tooltip label={sortOrder === 'asc' ? 'Ascending' : 'Descending'}>
+        <Tooltip label={sortOrder === 'asc' ? t('shares.ascending') : t('shares.descending')}>
           <ActionIcon variant='light' onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}>
             {sortOrder === 'asc' ? <IconSortAscending size='1rem' /> : <IconSortDescending size='1rem' />}
           </ActionIcon>
@@ -152,9 +164,7 @@ export default function DashboardShares() {
       </Group>
 
       {filteredShares.length === 0 ? (
-        <Text c='dimmed'>
-          {shares.length === 0 ? 'No active share links.' : 'No shares match your filter.'}
-        </Text>
+        <Text c='dimmed'>{shares.length === 0 ? t('shares.noShares') : t('shares.noFilterMatch')}</Text>
       ) : (
         filteredShares.map((share) => {
           const url = shareUrl(share.token, share.file.name);
@@ -198,19 +208,19 @@ export default function DashboardShares() {
                     <Menu>
                       <Menu.Target>
                         <Button variant='light' size='xs'>
-                          Actions
+                          {t('shares.actions')}
                         </Button>
                       </Menu.Target>
                       <Menu.Dropdown>
                         <Menu.Item leftSection={<IconCopy size='1rem' />} onClick={() => copy(url)}>
-                          Copy link
+                          {t('shares.copyLink')}
                         </Menu.Item>
                         <Menu.Item
                           color='red'
                           leftSection={<IconTrash size='1rem' />}
                           onClick={() => revoke(share.id)}
                         >
-                          Revoke
+                          {t('shares.revoke')}
                         </Menu.Item>
                       </Menu.Dropdown>
                     </Menu>
@@ -225,12 +235,12 @@ export default function DashboardShares() {
                     </Badge>
                     {share.maxViews && (
                       <Badge size='sm' variant='light' color='yellow'>
-                        {share.views}/{share.maxViews} views
+                        {t('shares.views', { views: share.views, maxViews: share.maxViews })}
                       </Badge>
                     )}
                     {share.expiresAt && (
                       <Badge size='sm' variant='light' color='red'>
-                        until {new Date(share.expiresAt).toLocaleString()}
+                        {t('shares.expires', { date: new Date(share.expiresAt).toLocaleString() })}
                       </Badge>
                     )}
                   </Group>
@@ -238,13 +248,13 @@ export default function DashboardShares() {
                   <Group gap='xs' wrap='nowrap'>
                     <TextInputForShares value={url} />
 
-                    <Tooltip label='Copy'>
+                    <Tooltip label={t('shares.copy')}>
                       <ActionIcon variant='light' onClick={() => copy(url)}>
                         <IconCopy size='1rem' />
                       </ActionIcon>
                     </Tooltip>
 
-                    <Tooltip label='Revoke'>
+                    <Tooltip label={t('shares.revoke')}>
                       <ActionIcon color='red' variant='light' onClick={() => revoke(share.id)}>
                         <IconTrash size='1rem' />
                       </ActionIcon>

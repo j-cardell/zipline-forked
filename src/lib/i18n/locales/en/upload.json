@@ -159,6 +159,44 @@
       }
     }
   },
+  "dropOverlay": {
+    "title": "Select folder",
+    "toFolder": "Files will be uploaded to the selected folder",
+    "chooseAfterDrop": "Choose a folder after dropping",
+    "dropToUpload": "Drop files to upload"
+  },
+  "paste": {
+    "folder": {
+      "title": "Select folder for upload"
+    }
+  },
+  "importDir": {
+    "title": "Import directory",
+    "description": "This scans a directory on the server filesystem and imports its files into your account. Defaults to /zipline/uploads/_manual_uploads if no directory is provided.",
+    "directoryPath": {
+      "label": "Directory path",
+      "placeholder": "/zipline/uploads/_manual_uploads",
+      "description": "Leave empty to use the default manual uploads folder"
+    },
+    "destinationFolder": {
+      "label": "Destination folder",
+      "placeholder": "Select a folder"
+    },
+    "noFolder": "No folder",
+    "complete": "Import complete",
+    "imported": "Imported {{count}} files",
+    "failed": "Import failed",
+    "unknownError": "Unknown error",
+    "scanAndImport": "Scan and import",
+    "result": {
+      "title": "Import result",
+      "directory": "Directory",
+      "inserted": "Inserted",
+      "imported": "Imported",
+      "deleted": "Deleted",
+      "skipped": "Skipped"
+    }
+  },
   "errors": {
     "parse": "Failed to parse server response: {{response}}",
     "unknown": "An unknown error occurred",

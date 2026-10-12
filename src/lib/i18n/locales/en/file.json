@@ -177,5 +177,56 @@
     "katexError": "KaTeX error",
     "showLess": "Show Less",
     "showMore": "Show More ({{count}} more lines)"
+  },
+  "shareModal": {
+    "title": "Share {{name}}",
+    "shareLink": "Share link",
+    "copy": "Copy",
+    "copied": {
+      "title": "Copied",
+      "message": "Share link copied"
+    },
+    "setExpiration": "Set expiration",
+    "expiresAt": "Expires at",
+    "maxViews": "Max views",
+    "maxViewsPlaceholder": "Unlimited",
+    "password": "Password (optional)",
+    "passwordPlaceholder": "No password",
+    "create": "Create share link",
+    "activeShares": "Active shares",
+    "revoke": "Revoke",
+    "errors": {
+      "createFailed": "Failed to create share",
+      "listFailed": "Failed to list shares",
+      "revokeFailed": "Failed to revoke share"
+    }
+  },
+  "shares": {
+    "title": "Shares",
+    "filterPlaceholder": "Filter by name, type, or token...",
+    "sort": {
+      "created": "Created",
+      "name": "Name",
+      "views": "Views",
+      "expires": "Expires"
+    },
+    "ascending": "Ascending",
+    "descending": "Descending",
+    "noShares": "No active share links.",
+    "noFilterMatch": "No shares match your filter.",
+    "actions": "Actions",
+    "copyLink": "Copy link",
+    "revoke": "Revoke",
+    "views": "{{views}}/{{maxViews}} views",
+    "expires": "until {{date}}",
+    "copy": "Copy",
+    "copied": {
+      "title": "Copied",
+      "message": "Share link copied"
+    },
+    "revoked": {
+      "title": "Revoked",
+      "message": "Share link revoked"
+    }
   }
 }

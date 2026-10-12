@@ -2,18 +2,20 @@ import { useFolders } from '@/lib/client/hooks/useFolders';
 import { buildFolderHierarchy } from '@/lib/folderHierarchy';
 import { Button, Group, Paper, ScrollArea, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function FolderSelectModal({
   onSelect,
   onCancel,
   allowNoFolder = true,
-  confirmLabel = 'Select',
+  confirmLabel,
 }: {
   onSelect: (folderId: string | undefined) => void;
   onCancel: () => void;
   allowNoFolder?: boolean;
   confirmLabel?: string;
 }) {
+  const { t } = useTranslation('folders');
   const { data: folders } = useFolders();
   const folderOptions = useMemo(() => (folders ? buildFolderHierarchy(folders) : []), [folders]);
   const [search, setSearch] = useState('');
@@ -27,7 +29,7 @@ export default function FolderSelectModal({
   return (
     <Stack gap='md'>
       <TextInput
-        placeholder='Search folders...'
+        placeholder={t('select.search')}
         value={search}
         onChange={(event) => setSearch(event.currentTarget.value)}
       />
@@ -44,7 +46,7 @@ export default function FolderSelectModal({
                   background: selected === undefined ? 'var(--mantine-primary-color-light)' : undefined,
                 }}
               >
-                <Text size='sm'>No folder</Text>
+                <Text size='sm'>{t('select.noFolder')}</Text>
               </UnstyledButton>
             )}
 
@@ -65,7 +67,7 @@ export default function FolderSelectModal({
 
             {filtered.length === 0 && search.trim() && (
               <Text size='sm' c='dimmed' p='sm'>
-                No folders match your search.
+                {t('select.noMatch')}
               </Text>
             )}
           </Stack>
@@ -74,10 +76,10 @@ export default function FolderSelectModal({
 
       <Group justify='right'>
         <Button variant='default' size='sm' onClick={onCancel}>
-          Cancel
+          {t('select.cancel')}
         </Button>
         <Button size='sm' onClick={() => onSelect(selected)} disabled={!folders}>
-          {confirmLabel}
+          {confirmLabel || t('select.confirm')}
         </Button>
       </Group>
     </Stack>

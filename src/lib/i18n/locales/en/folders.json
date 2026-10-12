@@ -131,6 +131,14 @@
       "movedMessage": "{{name}} has been moved"
     }
   },
+  "select": {
+    "title": "Select folder",
+    "search": "Search folders...",
+    "noFolder": "No folder",
+    "noMatch": "No folders match your search.",
+    "cancel": "Cancel",
+    "confirm": "Select"
+  },
   "viewFiles": {
     "title": "Files in {{name}}",
     "found": "{{amount}} files found"

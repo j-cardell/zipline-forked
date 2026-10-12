@@ -18,6 +18,7 @@ import { useClipboard } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconCopy, IconTrash } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function ShareFileModal({
   file,
@@ -28,6 +29,7 @@ export default function ShareFileModal({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation(['file', 'common']);
   const clipboard = useClipboard();
 
   const [shares, setShares] = useState<Share[]>([]);
@@ -47,19 +49,19 @@ export default function ShareFileModal({
         if (cancelled) return;
         setShares(data.shares);
       })
-      .catch((err) => {
+      .catch((err: any) => {
         if (cancelled) return;
-        notifications.show({ title: 'Error', message: err.message, color: 'red' });
+        notifications.show({ title: t('common:status.error'), message: err.message, color: 'red' });
       });
     return () => {
       cancelled = true;
     };
-  }, [open, file]);
+  }, [open, file, t]);
 
   useEffect(() => {
     if (open) return;
-    const t = setTimeout(() => setNewShareUrl(''), 200);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setNewShareUrl(''), 200);
+    return () => clearTimeout(timer);
   }, [open]);
 
   const createShare = async () => {
@@ -84,7 +86,7 @@ export default function ShareFileModal({
         ...prev,
       ]);
     } catch (err: any) {
-      notifications.show({ title: 'Error', message: err.message, color: 'red' });
+      notifications.show({ title: t('common:status.error'), message: err.message, color: 'red' });
     } finally {
       setLoading(false);
     }
@@ -94,8 +96,13 @@ export default function ShareFileModal({
     try {
       await revokeFileShare(file, shareId);
       setShares((prev) => prev.filter((s) => s.id !== shareId));
+      notifications.show({
+        title: t('shareModal.revoke'),
+        message: t('shareModal.revoke'),
+        color: 'green',
+      });
     } catch (err: any) {
-      notifications.show({ title: 'Error', message: err.message, color: 'red' });
+      notifications.show({ title: t('common:status.error'), message: err.message, color: 'red' });
     }
   };
 
@@ -103,7 +110,7 @@ export default function ShareFileModal({
     <Modal
       opened={open}
       onClose={onClose}
-      title={<Title order={3}>Share {file.name}</Title>}
+      title={<Title order={3}>{t('shareModal.title', { name: file.name })}</Title>}
       size='lg'
       centered
     >
@@ -111,19 +118,23 @@ export default function ShareFileModal({
         {newShareUrl && (
           <Group wrap='nowrap'>
             <TextInput
-              label='Share link'
+              label={t('shareModal.shareLink')}
               value={newShareUrl}
               readOnly
               style={{ flex: 1 }}
               onFocus={(e) => e.currentTarget.select()}
             />
-            <Tooltip label='Copy'>
+            <Tooltip label={t('shareModal.copy')}>
               <Button
                 variant='light'
                 px='sm'
                 onClick={() => {
                   clipboard.copy(newShareUrl);
-                  notifications.show({ title: 'Copied', message: 'Share link copied', color: 'green' });
+                  notifications.show({
+                    title: t('shareModal.copied.title'),
+                    message: t('shareModal.copied.message'),
+                    color: 'green',
+                  });
                 }}
               >
                 <IconCopy size='1rem' />
@@ -134,13 +145,13 @@ export default function ShareFileModal({
 
         <Group align='flex-end'>
           <Switch
-            label='Set expiration'
+            label={t('shareModal.setExpiration')}
             checked={expiresEnabled}
             onChange={(e) => setExpiresEnabled(e.currentTarget.checked)}
           />
           <TextInput
             type='datetime-local'
-            label='Expires at'
+            label={t('shareModal.expiresAt')}
             disabled={!expiresEnabled}
             value={expiresAt}
             onChange={(e) => setExpiresAt(e.currentTarget.value)}
@@ -149,27 +160,27 @@ export default function ShareFileModal({
         </Group>
 
         <NumberInput
-          label='Max views'
-          placeholder='Unlimited'
+          label={t('shareModal.maxViews')}
+          placeholder={t('shareModal.maxViewsPlaceholder')}
           min={1}
           value={maxViews}
           onChange={(val) => setMaxViews(typeof val === 'number' ? val : undefined)}
         />
 
         <PasswordInput
-          label='Password (optional)'
-          placeholder='No password'
+          label={t('shareModal.password')}
+          placeholder={t('shareModal.passwordPlaceholder')}
           value={password}
           onChange={(e) => setPassword(e.currentTarget.value)}
         />
 
         <Button onClick={createShare} loading={loading} disabled={expiresEnabled && !expiresAt}>
-          Create share link
+          {t('shareModal.create')}
         </Button>
 
         {shares.length > 0 && (
           <Stack gap='xs'>
-            <Text fw={600}>Active shares</Text>
+            <Text fw={600}>{t('shareModal.activeShares')}</Text>
             {shares.map((share) => {
               const shareUrl = `${window.location.origin}/u/${encodeURIComponent(file.name)}?share=${share.token}`;
               return (
@@ -182,14 +193,14 @@ export default function ShareFileModal({
                     size='sm'
                   />
                   <Group gap='xs' wrap='nowrap'>
-                    <Tooltip label='Copy'>
+                    <Tooltip label={t('shareModal.copy')}>
                       <ActionIcon
                         variant='light'
                         onClick={() => {
                           clipboard.copy(shareUrl);
                           notifications.show({
-                            title: 'Copied',
-                            message: 'Share link copied',
+                            title: t('shareModal.copied.title'),
+                            message: t('shareModal.copied.message'),
                             color: 'green',
                           });
                         }}
@@ -197,7 +208,7 @@ export default function ShareFileModal({
                         <IconCopy size='1rem' />
                       </ActionIcon>
                     </Tooltip>
-                    <Tooltip label='Revoke'>
+                    <Tooltip label={t('shareModal.revoke')}>
                       <ActionIcon color='red' variant='light' onClick={() => revokeShare(share.id)}>
                         <IconTrash size='1rem' />
                       </ActionIcon>

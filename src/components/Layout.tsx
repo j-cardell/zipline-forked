@@ -71,10 +71,10 @@ function isTextField(target: EventTarget | null): boolean {
   return tag === 'input' || tag === 'textarea' || target.isContentEditable;
 }
 
-function promptForFolder(): Promise<string | undefined | null> {
+function promptForFolder(title: string): Promise<string | undefined | null> {
   return new Promise((resolve) => {
     const id = openModal({
-      title: 'Select folder for upload',
+      title,
       size: 'lg',
       centered: true,
       children: (
@@ -278,7 +278,7 @@ const renderLinks = (
 };
 
 export default function Layout() {
-  const { t } = useTranslation(['layout', 'common', 'serverSettings']);
+  const { t } = useTranslation(['layout', 'common', 'serverSettings', 'upload']);
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
   const [opened, setOpened] = useState(false);
@@ -327,7 +327,7 @@ export default function Layout() {
       if (uploadingRef.current) return;
       uploadingRef.current = true;
 
-      const folderId = await promptForFolder();
+      const folderId = await promptForFolder(t('upload:paste.folder.title'));
       if (folderId === null) {
         uploadingRef.current = false;
         return;
@@ -375,7 +375,7 @@ export default function Layout() {
         mutateCache(() => true, undefined, { revalidate: true });
       }
     },
-    [clipboard, clearEphemeral, config, ephemeral, location.pathname, mutateCache, options],
+    [clipboard, clearEphemeral, config, ephemeral, location.pathname, mutateCache, options, t],
   );
 
   useEffect(() => {
