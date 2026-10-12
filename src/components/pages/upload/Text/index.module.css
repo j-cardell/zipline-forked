@@ -1,12 +1,20 @@
+.editor {
+  overflow: hidden;
+}
+
+.editor:focus-within {
+  border-color: var(--mantine-primary-color-filled);
+}
+
 .textarea textarea {
   font-family: var(--mantine-font-family-monospace), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  height: 25vh;
+  line-height: 1.5;
+  height: clamp(180px, 25vh, 320px);
+  min-height: 120px;
+  padding: var(--mantine-spacing-xs);
   background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
 }
 
-.snippet {
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-md);
-  padding: var(--mantine-spacing-sm);
-  margin-bottom: var(--mantine-spacing-md);
+.preview {
+  overflow-wrap: anywhere;
 }

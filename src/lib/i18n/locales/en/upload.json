@@ -41,8 +41,11 @@
     "addFile": "Add text file",
     "fileHeading": "File {{number}}",
     "filename": "Filename",
+    "filenamePlaceholder": "snippet.js",
     "language": "Language",
-    "placeholder": "Paste your code here..."
+    "placeholder": "Paste your code here...",
+    "removeFile": "Remove file {{number}}",
+    "emptyPreview": "Nothing to preview"
   },
   "options": {
     "button": "Options",

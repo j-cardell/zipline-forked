@@ -5,16 +5,24 @@ import { bytes } from '@/lib/bytes';
 import { uploadFiles } from '@/lib/client/upload/files';
 import useMultiTextFiles from '@/lib/client/upload/useMultiTextFiles';
 import { useUploadOptionsStore } from '@/lib/client/store/uploadOptions';
-import { ActionIcon, Button, Group, Select, Tabs, Textarea, TextInput, Title } from '@mantine/core';
-import { useClipboard } from '@mantine/hooks';
 import {
-  IconCursorText,
-  IconEyeFilled,
-  IconFiles,
-  IconPlus,
-  IconTrashFilled,
-  IconUpload,
-} from '@tabler/icons-react';
+  ActionIcon,
+  Box,
+  Button,
+  Divider,
+  Group,
+  Paper,
+  Select,
+  Stack,
+  Tabs,
+  Text,
+  Textarea,
+  TextInput,
+  Title,
+  Tooltip,
+} from '@mantine/core';
+import { useClipboard } from '@mantine/hooks';
+import { IconFiles, IconPlus, IconTrashFilled, IconUpload } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -48,19 +56,21 @@ export default function UploadText() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [files]);
+  }, [handleBeforeUnload]);
 
   const handleTab = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Tab') {
+    (e: React.KeyboardEvent<HTMLTextAreaElement>, index: number) => {
+      if (e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault();
-        const { selectionStart, selectionEnd, value } = e.currentTarget;
+        const textarea = e.currentTarget;
+        const { selectionStart, selectionEnd, value } = textarea;
         const newValue = `${value.substring(0, selectionStart)}  ${value.substring(selectionEnd)}`;
 
-        setFile(selected, 'text', newValue);
+        setFile(index, 'text', newValue);
+        requestAnimationFrame(() => textarea.setSelectionRange(selectionStart + 2, selectionStart + 2));
       }
     },
-    [selected, setFile],
+    [setFile],
   );
 
   const handleLangChange = useCallback(
@@ -104,10 +114,9 @@ export default function UploadText() {
   };
 
   return (
-    <>
+    <Stack gap='sm'>
       <Group gap='sm'>
         <Title order={1}>{t('text.title')}</Title>
-
         <Button
           variant='outline'
           size='compact-sm'
@@ -119,106 +128,143 @@ export default function UploadText() {
         </Button>
       </Group>
 
-      <Tabs defaultValue='textareas' variant='pills' my='sm'>
-        <Tabs.List my='sm'>
-          <Tabs.Tab value='textareas' leftSection={<IconCursorText size='1rem' />}>
-            {t('text.tabs.text')}
-          </Tabs.Tab>
-          <Tabs.Tab value='preview' leftSection={<IconEyeFilled size='1rem' />}>
-            {t('text.tabs.preview')}
-          </Tabs.Tab>
-        </Tabs.List>
-
-        <Tabs.Panel value='textareas'>
-          {files.map((file, index) => (
-            <div key={index} className={styles.snippet}>
-              <Group gap='xs' mb='xs'>
-                <TextInput
-                  size='xs'
-                  placeholder='snippet.js'
-                  label={t('text.filename')}
-                  value={file.name}
-                  onChange={(e) => setFile(index, 'name', e.currentTarget.value)}
-                  style={{ flex: 1 }}
-                />
-                <Select
-                  size='xs'
-                  label={t('text.language')}
-                  data={codeMap.map((meta) => ({ value: meta.ext, label: meta.name }))}
-                  value={file.lang}
-                  onChange={(value) => value && handleLangChange(index, value)}
-                  searchable
-                />
-
-                {files.length > 1 && (
-                  <ActionIcon
-                    onClick={() => removeFile(index)}
-                    variant='outline'
-                    color='red'
-                    size='md'
-                    style={{ alignSelf: 'flex-end' }}
-                  >
-                    <IconTrashFilled size='1rem' />
-                  </ActionIcon>
-                )}
-              </Group>
-
-              <Textarea
-                value={file.text}
-                onChange={(e) => setFile(index, 'text', e.currentTarget.value)}
-                onKeyDown={handleTab}
-                disabled={loading}
-                className={styles.textarea}
-                resize='vertical'
-                placeholder={t('text.placeholder')}
-                rows={16}
-              />
-            </div>
-          ))}
-          <Group my='sm' justify='center'>
-            <Button
-              onClick={() => addFile(selected)}
-              variant='outline'
-              size='compact-sm'
-              leftSection={<IconPlus size='1rem' />}
-            >
-              {t('text.addFile')}
-            </Button>
-
+      <Tabs defaultValue='textareas' variant='pills'>
+        <Group justify='space-between' mb='xs' gap='xs'>
+          <Tabs.List>
+            <Tabs.Tab value='textareas'>{t('text.tabs.text')}</Tabs.Tab>
+            <Tabs.Tab value='preview'>{t('text.tabs.preview')}</Tabs.Tab>
+          </Tabs.List>
+          <Group gap='xs'>
             {files.some((file) => file.text.length > 0) && (
               <Button
                 variant='outline'
-                size='compact-sm'
+                color='red'
+                size='compact-xs'
+                disabled={loading}
                 leftSection={<IconTrashFilled size='1rem' />}
                 onClick={() => removeFile(true)}
               >
                 {t('actions.clearAll')}
               </Button>
             )}
+            <Button
+              onClick={() => addFile(selected)}
+              variant='outline'
+              size='compact-xs'
+              disabled={loading}
+              leftSection={<IconPlus size='1rem' />}
+            >
+              {t('text.addFile')}
+            </Button>
           </Group>
+        </Group>
+
+        <Tabs.Panel value='textareas'>
+          <Stack gap='sm'>
+            {files.map((file, index) => (
+              <Paper key={index} withBorder className={styles.editor}>
+                <Group justify='space-between' gap='sm' px='xs' py={6}>
+                  <Text size='xs' c='dimmed' id={`text-file-${index}`}>
+                    {t('text.fileHeading', { number: index + 1 })}
+                  </Text>
+                  <Group gap='xs'>
+                    <TextInput
+                      size='xs'
+                      w={170}
+                      placeholder={t('text.filenamePlaceholder')}
+                      aria-label={t('text.filename')}
+                      value={file.name}
+                      onChange={(e) => setFile(index, 'name', e.currentTarget.value)}
+                      disabled={loading}
+                    />
+                    <Select
+                      size='xs'
+                      w={150}
+                      aria-label={t('text.language')}
+                      data={codeMap.map((meta) => ({ value: meta.ext, label: meta.name }))}
+                      value={file.lang}
+                      onChange={(value) => value && handleLangChange(index, value)}
+                      disabled={loading}
+                      allowDeselect={false}
+                      searchable
+                    />
+                    {files.length > 1 && (
+                      <Tooltip label={t('text.removeFile', { number: index + 1 })}>
+                        <ActionIcon
+                          onClick={() => removeFile(index)}
+                          aria-label={t('text.removeFile', { number: index + 1 })}
+                          variant='outline'
+                          color='red'
+                          size='md'
+                          disabled={loading}
+                        >
+                          <IconTrashFilled size='1rem' />
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
+                  </Group>
+                </Group>
+                <Divider />
+
+                <Textarea
+                  value={file.text}
+                  onChange={(e) => setFile(index, 'text', e.currentTarget.value)}
+                  onKeyDown={(e) => handleTab(e, index)}
+                  aria-labelledby={`text-file-${index}`}
+                  disabled={loading}
+                  spellCheck={false}
+                  variant='unstyled'
+                  className={styles.textarea}
+                  resize='vertical'
+                  placeholder={t('text.placeholder')}
+                />
+              </Paper>
+            ))}
+          </Stack>
         </Tabs.Panel>
 
         <Tabs.Panel value='preview'>
-          {files.map((file, index) => (
-            <div key={index}>
-              <Title order={4}>{t('text.fileHeading', { number: index + 1 })}</Title>
-              <Render mode={renderMode(file.lang)} code={file.text} language={file.lang} />
-            </div>
-          ))}
+          <Stack gap='sm'>
+            {files.map((file, index) => (
+              <Paper key={index} withBorder className={styles.editor}>
+                <Group justify='space-between' px='xs' py={6}>
+                  <Text size='xs' c='dimmed'>
+                    {t('text.fileHeading', { number: index + 1 })}
+                  </Text>
+                  <Text size='xs' c='dimmed'>
+                    {codeMap.find((meta) => meta.ext === file.lang)?.name ?? file.lang}
+                  </Text>
+                </Group>
+                <Divider />
+                <Box p='xs' className={styles.preview}>
+                  {file.text ? (
+                    <Render mode={renderMode(file.lang)} code={file.text} language={file.lang} />
+                  ) : (
+                    <Text size='sm' c='dimmed'>
+                      {t('text.emptyPreview')}
+                    </Text>
+                  )}
+                </Box>
+              </Paper>
+            ))}
+          </Stack>
         </Tabs.Panel>
       </Tabs>
 
-      <Group justify='right' gap='sm' my='md'>
-        <UploadOptionsButton numFiles={1} />
+      <Group justify='flex-end' gap='xs'>
+        <UploadOptionsButton numFiles={files.length} />
         <Button
           variant='outline'
           leftSection={<IconUpload size='1rem' />}
-          disabled={files.some((file) => file.text.length === 0) || loading}
+          disabled={files.some((file) => file.text.length === 0)}
+          loading={loading}
           onClick={upload}
+          flex={{ base: 1, xs: 'initial' }}
+          miw={0}
         >
           {t('actions.upload', { count: files.length, size: bytes(aggSize()) })}
         </Button>
       </Group>
-    </>
+    </Stack>
   );
 }
