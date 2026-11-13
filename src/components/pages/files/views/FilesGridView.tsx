@@ -397,8 +397,6 @@ export default forwardRef<
                           e?.preventDefault?.();
                           handleSelect(file.id);
                         }}
-                        compact={gridSize === 'compact'}
-                        fill
                       />
                     </div>
                   );

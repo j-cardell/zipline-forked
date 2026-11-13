@@ -10,7 +10,7 @@ import { randomCharacters } from '@/lib/random';
 import { formatRootUrl } from '@/lib/url';
 import { userMiddleware } from '@/server/middleware/user';
 import typedPlugin from '@/server/typedPlugin';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { buffer } from 'node:stream/consumers';
 import z from 'zod';
@@ -104,7 +104,7 @@ export default typedPlugin(
           throw new ApiError(1009, typeof e === 'string' ? e : 'invalid file name');
         }
 
-        const zip = archiver('zip', { zlib: { level: 6 } });
+        const zip = new ZipArchive({ zlib: { level: 6 } });
         const zipBufferPromise = buffer(zip);
         const seenNames = new Set<string>();
 

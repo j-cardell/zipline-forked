@@ -1,10 +1,4 @@
-export const LANGUAGES = ['en', 'zh', 'ja', 'fr', 'de', 'es', 'pt', 'ru', 'tr'] as const;
-export type Language = (typeof LANGUAGES)[number];
-
-export const DEFAULT_LANGUAGE: Language = 'en';
-
-// native names are intentionally not translated, so a user can always find their own language
-export const LANGUAGE_NAMES: Record<Language, string> = {
+export const LANGUAGE_NAMES = {
   en: 'English',
   zh: '简体中文',
   ja: '日本語',
@@ -14,22 +8,27 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
   pt: 'Português',
   ru: 'Русский',
   tr: 'Türkçe',
+  nl: 'Nederlands',
+  it: 'Italiano',
+  ro: 'Română',
+} as const;
+
+export type Language = keyof typeof LANGUAGE_NAMES;
+
+export const LANGUAGES = Object.keys(LANGUAGE_NAMES) as Language[];
+export const DEFAULT_LANGUAGE: Language = 'en';
+
+const DAYJS_OVERRIDES: Partial<Record<Language, string>> = {
+  zh: 'zh-cn',
+  pt: 'pt-br',
 };
 
-export const DAYJS_LOCALES: Record<Language, string> = {
-  en: 'en',
-  zh: 'zh-cn',
-  ja: 'ja',
-  fr: 'fr',
-  de: 'de',
-  es: 'es',
-  pt: 'pt-br',
-  ru: 'ru',
-  tr: 'tr',
-};
+export function getDayjsLocale(language: Language): string {
+  return DAYJS_OVERRIDES[language] ?? language;
+}
 
 export function isLanguage(value: unknown): value is Language {
-  return typeof value === 'string' && (LANGUAGES as readonly string[]).includes(value);
+  return typeof value === 'string' && Object.hasOwn(LANGUAGE_NAMES, value);
 }
 
 export function matchLanguage(tag: string): Language | null {

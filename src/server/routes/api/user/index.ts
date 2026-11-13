@@ -10,6 +10,7 @@ import {
   type UserUpdate,
 } from '@/lib/db/models/user';
 import { users, userSessions } from '@/lib/db/schema';
+import { discordComponentEmbedSchema } from '@/lib/discord';
 import { log } from '@/lib/logger';
 import { secondlyRatelimit } from '@/lib/ratelimits';
 import { zStringTrimmed } from '@/lib/validation';
@@ -69,6 +70,7 @@ export default typedPlugin(
                 embedDescription: z.string().nullish(),
                 embedColor: z.string().nullish(),
                 embedSiteName: z.string().nullish(),
+                discordComponentEmbed: discordComponentEmbedSchema.nullish(),
                 enabled: z.boolean().optional(),
                 disableTextFiles: z.boolean().optional(),
                 align: z.enum(['left', 'center', 'right']).optional(),
@@ -127,6 +129,9 @@ export default typedPlugin(
 
         const currentSession = await getSession(req, res);
 
+        const view = { ...req.user.view, ...req.body.view };
+        const embed = !view.discordComponentEmbed?.enabled && !!view.embed;
+
         const data: UserUpdate = {
           ...(req.body.username && { username: req.body.username }),
           ...(req.body.password && { password: await hashPassword(req.body.password) }),
@@ -140,14 +145,12 @@ export default typedPlugin(
                 disableTextFiles: req.body.view.disableTextFiles || false,
               }),
               ...(req.body.view.content !== undefined && { content: req.body.view.content || null }),
-              ...(req.body.view.embed !== undefined && { embed: req.body.view.embed || false }),
+              ...((req.body.view.embed !== undefined ||
+                req.body.view.discordComponentEmbed !== undefined) && {
+                embed,
+              }),
               ...(req.body.view.embedMediaOnly !== undefined && {
-                embedMediaOnly: (() => {
-                  const embedOn = !!(req.body.view.embed !== undefined
-                    ? req.body.view.embed
-                    : (req.user.view as { embed?: boolean }).embed);
-                  return embedOn ? false : req.body.view.embedMediaOnly || false;
-                })(),
+                embedMediaOnly: !embed && !!req.body.view.embedMediaOnly,
               }),
               ...(req.body.view.embedTitle !== undefined && {
                 embedTitle: req.body.view.embedTitle || null,
@@ -160,6 +163,9 @@ export default typedPlugin(
               }),
               ...(req.body.view.embedSiteName !== undefined && {
                 embedSiteName: req.body.view.embedSiteName || null,
+              }),
+              ...(req.body.view.discordComponentEmbed !== undefined && {
+                discordComponentEmbed: req.body.view.discordComponentEmbed || null,
               }),
               ...(req.body.view.align !== undefined && { align: req.body.view.align || 'center' }),
               ...(req.body.view.showMimetype !== undefined && {

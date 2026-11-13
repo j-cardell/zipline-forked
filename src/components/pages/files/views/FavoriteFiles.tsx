@@ -64,7 +64,7 @@ export default function FavoriteFiles() {
             ) : (data?.page.length ?? 0) > 0 ? (
               data?.page.map((file) => (
                 <Suspense fallback={<Skeleton height={skeletonHeight} animate />} key={file.id}>
-                  <DashboardFile file={file} compact={gridSize === 'compact'} />
+                  <DashboardFile file={file} />
                 </Suspense>
               ))
             ) : (

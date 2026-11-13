@@ -1,11 +1,8 @@
 import useObjectState from '@/lib/client/hooks/useObjectState';
+import type { TextFile } from './text';
 
 export type MultiTextFileState = {
-  files: {
-    text: string;
-    lang: string;
-    name: string;
-  }[];
+  files: TextFile[];
   selected: number;
 };
 
@@ -13,26 +10,25 @@ export const initialState: MultiTextFileState['files'] = [
   {
     text: '',
     lang: 'txt',
-    name: 'snippet.txt',
   },
 ];
 
-export default function useMultiTextFiles(): [
+export default function useMultiTextFiles(initialText = ''): [
   MultiTextFileState['files'],
   number,
   {
-    setFile: (index: number, key: string, value: any) => void;
+    setFile: (index: number, key: keyof TextFile, value: string) => void;
     addFile: (index: number) => void;
     removeFile: (index: number | true) => void;
     setSelected: (index: number) => void;
   },
 ] {
   const [state, setState] = useObjectState<MultiTextFileState>({
-    files: initialState,
+    files: initialText ? [{ text: initialText, lang: 'txt' }] : initialState,
     selected: 0,
   });
 
-  const setFile = (index: number, key: string, value: any) => {
+  const setFile = (index: number, key: keyof TextFile, value: string) => {
     setState(
       'files',
       state.files.map((file, i) => (i === index ? { ...file, [key]: value } : file)),
@@ -43,7 +39,6 @@ export default function useMultiTextFiles(): [
     const newFile: MultiTextFileState['files'][number] = {
       text: '',
       lang: 'txt',
-      name: 'snippet.txt',
     };
 
     const newFiles = [...state.files];
@@ -54,24 +49,11 @@ export default function useMultiTextFiles(): [
   };
 
   const removeFile = (index: number | true) => {
-    if (index === true) {
+    if (index === true || state.files.length === 1) {
       setState({
         files: initialState,
         selected: 0,
       });
-
-      return;
-    }
-
-    if (state.files.length === 1) {
-      setState('files', [
-        {
-          text: '',
-          lang: 'txt',
-          name: 'snippet.txt',
-        },
-      ]);
-      setState('selected', 0);
 
       return;
     }

@@ -14,16 +14,16 @@ import { db } from '@/lib/db';
 import { fileRelations } from '@/lib/db/models/file';
 import { getUserSummary } from '@/lib/db/models/user';
 import { escapeLike } from '@/lib/db/utils';
+import { prepareDiscordComponentEmbedForFile, serializeDiscordComponentEmbed } from '@/lib/discord';
 import { sanitizeFilename } from '@/lib/fs';
 import { parseString } from '@/lib/parser';
 import { parserMetrics } from '@/lib/parser/metrics';
 import { createZiplineSsr } from '@/lib/ssr/createZiplineSsr';
-import { formatMediaUrl } from '@/lib/url';
 import { stripHtml } from '@/lib/stripHtml';
 import type { ZiplineTheme } from '@/lib/theme';
 import { readThemes } from '@/lib/theme/file';
-import { verifyFileAccess } from '@/server/middleware/fileAccess';
-import { FastifyReply, FastifyRequest } from 'fastify';
+import { formatMediaUrl } from '@/lib/url';
+import { FastifyRequest } from 'fastify';
 import { renderToString } from 'react-dom/server';
 import { createStaticHandler, createStaticRouter, StaticRouterProvider } from 'react-router-dom';
 import { createRoutes } from './routes';
@@ -53,12 +53,10 @@ export async function render(
   {
     defaultTheme,
     req,
-    res,
   }: {
     themes: ZiplineTheme[];
     defaultTheme: Config['website']['theme'];
     req: FastifyRequest<{ Params: { id: string }; Querystring: { token?: string } }>;
-    res: FastifyReply;
   },
   url: string,
 ) {
@@ -70,9 +68,6 @@ export async function render(
 
   const result = await getFile(id);
   if (!result || !result.userId) return { html: 'Not Found', meta: '', status: 404 };
-
-  const access = await verifyFileAccess(req, res, result);
-  if (!access.allowed) return { html: 'Not Found', meta: '', status: 404 };
 
   if (result.maxViews && result.views >= result.maxViews) return { html: 'Gone', meta: '', status: 410 };
   if (result.deletesAt && result.deletesAt <= new Date()) return { html: 'Expired', meta: '', status: 410 };
@@ -154,7 +149,6 @@ export async function render(
     metrics,
     filesRoute: zConfig.files.route,
     config,
-    share: access.share?.token ?? null,
   };
 
   const routes = createRoutes(themes, defaultTheme);
@@ -177,11 +171,25 @@ export async function render(
   const mediaUrl = formatMediaUrl(host, file.name);
   const safeOriginalName = stripHtml(file.originalName || '');
   const safeType = stripHtml(file.type || '');
-
-  const viewEnabled = !!user.view?.enabled;
-  const showRichOg = viewEnabled && !!user.view.embed;
-  const showMediaOg = viewEnabled && (!!user.view.embed || !!user.view.embedMediaOnly);
   const pageUrl = `${host}${url.split('?')[0]}`;
+  const viewEnabled = !!user.view?.enabled;
+  const previewDisabled = file.discordPreviewMode === 'none';
+  const componentConfig =
+    file.discordPreviewMode === 'components' ? file.discordComponentEmbed : user.view?.discordComponentEmbed;
+  const discordComponentEmbed = serializeDiscordComponentEmbed(
+    viewEnabled && !previewDisabled ? prepareDiscordComponentEmbedForFile(componentConfig, file.type) : null,
+    {
+      file,
+      user,
+      ...metrics,
+      link: { returned: pageUrl, raw: mediaUrl },
+    },
+  );
+
+  const showDefaultPreview = viewEnabled && !previewDisabled && file.discordPreviewMode !== 'components';
+  const showRichOg = showDefaultPreview && !!user.view.embed;
+  const showMediaOg =
+    !!discordComponentEmbed || (showDefaultPreview && (!!user.view.embed || !!user.view.embedMediaOnly));
 
   const richMeta = [
     showRichOg && user?.view?.embedTitle
@@ -192,7 +200,9 @@ export async function render(
             ...metrics,
           }) ?? '',
         )}" />`
-      : '',
+      : discordComponentEmbed
+        ? `<meta property="og:title" content="${safeOriginalName || safeFilename}" />`
+        : '',
     showRichOg && user?.view?.embedDescription
       ? `<meta property="og:description" content="${stripHtml(
           parseString(user.view.embedDescription, {
@@ -268,7 +278,9 @@ export async function render(
       : '';
 
   const otherOg =
-    showRichOg && !file.type?.startsWith('video') && !file.type?.startsWith('image')
+    (showRichOg || !!discordComponentEmbed) &&
+    !file.type?.startsWith('video') &&
+    !file.type?.startsWith('image')
       ? `
     <meta property="og:url" content="${pageUrl}" />
   `
@@ -276,9 +288,21 @@ export async function render(
 
   const docTitle = `<title>${file.originalName ? safeOriginalName : safeFilename}</title>`;
 
-  const includeHead = showRichOg || showMediaOg;
+  const includeHead = showRichOg || showMediaOg || !!discordComponentEmbed;
   const headMeta = includeHead
-    ? [richMeta, imageOg, videoOg, audioOg, otherOg, docTitle].filter(Boolean).join('\n')
+    ? [
+        richMeta,
+        imageOg,
+        videoOg,
+        audioOg,
+        otherOg,
+        docTitle,
+        discordComponentEmbed
+          ? `<script id="discord:component-embed" type="application/json">${discordComponentEmbed}</script>`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
     : '';
 
   return {

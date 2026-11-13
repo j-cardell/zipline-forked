@@ -24,72 +24,6 @@ import FullscreenFrame from './FullscreenFrame';
 import useFileContents from './useFileContent';
 import useFileUrls, { isDbFile } from './useFileUrls';
 
-function isClickOnVideoLetterbox(e: React.MouseEvent<HTMLVideoElement>): boolean {
-  const video = e.currentTarget;
-  if (!video.videoWidth || !video.videoHeight) return false;
-
-  const rect = video.getBoundingClientRect();
-  const videoRatio = video.videoWidth / video.videoHeight;
-  const boxRatio = rect.width / rect.height;
-
-  let contentWidth: number;
-  let contentHeight: number;
-  let contentLeft: number;
-  let contentTop: number;
-
-  if (videoRatio > boxRatio) {
-    contentWidth = rect.width;
-    contentHeight = rect.width / videoRatio;
-    contentLeft = rect.left;
-    contentTop = rect.top + (rect.height - contentHeight) / 2;
-  } else {
-    contentHeight = rect.height;
-    contentWidth = rect.height * videoRatio;
-    contentLeft = rect.left + (rect.width - contentWidth) / 2;
-    contentTop = rect.top;
-  }
-
-  return (
-    e.clientX < contentLeft ||
-    e.clientX > contentLeft + contentWidth ||
-    e.clientY < contentTop ||
-    e.clientY > contentTop + contentHeight
-  );
-}
-
-function isClickOnImageLetterbox(e: React.MouseEvent<HTMLImageElement>): boolean {
-  const img = e.currentTarget;
-  if (!img.naturalWidth || !img.naturalHeight) return false;
-
-  const rect = img.getBoundingClientRect();
-  const imgRatio = img.naturalWidth / img.naturalHeight;
-  const boxRatio = rect.width / rect.height;
-
-  let contentWidth: number;
-  let contentHeight: number;
-  let contentLeft: number;
-  let contentTop: number;
-
-  if (imgRatio > boxRatio) {
-    contentWidth = rect.width;
-    contentHeight = rect.width / imgRatio;
-    contentLeft = rect.left;
-    contentTop = rect.top + (rect.height - contentHeight) / 2;
-  } else {
-    contentHeight = rect.height;
-    contentWidth = rect.height * imgRatio;
-    contentLeft = rect.left + (rect.width - contentWidth) / 2;
-    contentTop = rect.top;
-  }
-
-  return (
-    e.clientX < contentLeft ||
-    e.clientX > contentLeft + contentWidth ||
-    e.clientY < contentTop ||
-    e.clientY > contentTop + contentHeight
-  );
-}
-
 export function Placeholder({ text, Icon, ...props }: { text: string; Icon: Icon; onClick?: () => void }) {
   return (
     <Center py='xs' style={{ height: '100%', width: '100%', cursor: 'pointer' }} {...props}>
@@ -103,9 +37,18 @@ export function Placeholder({ text, Icon, ...props }: { text: string; Icon: Icon
   );
 }
 
-function FullscreenSizedMedia({ children }: { children: React.ReactNode }) {
+function FullscreenSizedMedia({
+  children,
+  onBackdropClick,
+}: {
+  children: React.ReactNode;
+  onBackdropClick?: () => void;
+}) {
   return (
     <Box
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onBackdropClick?.();
+      }}
       style={{
         flex: 1,
         alignSelf: 'stretch',
@@ -125,30 +68,28 @@ export default function DashboardFileType({
   file,
   show,
   token,
-  share,
   code,
   allowZoom,
   fullscreen,
+  unframed,
   scrollParent,
-  compact,
-  fill,
+  onFullscreenBackdropClick,
 }: {
   file: DbFile | File;
   show?: boolean;
   token?: string | null;
-  share?: string | null;
   code?: boolean;
   allowZoom?: boolean;
   fullscreen?: boolean;
+  unframed?: boolean;
   scrollParent?: HTMLElement | null;
-  compact?: boolean;
-  fill?: boolean;
+  onFullscreenBackdropClick?: () => void;
 }) {
   const { t } = useTranslation('file');
   const disableMediaPreview = useSettingsStore((state) => state.settings.disableMediaPreview);
   const mediaAutoMuted = useSettingsStore((state) => state.settings.mediaAutoMuted);
 
-  const { fileUrl, thumbnailUrl, viewUrl } = useFileUrls({ file, token, share });
+  const { fileUrl, thumbnailUrl, viewUrl } = useFileUrls({ file, token });
   const db = isDbFile(file) ? file : null;
 
   const extension = file.name.split('.').pop() || '';
@@ -203,16 +144,11 @@ export default function DashboardFileType({
     if (!show) {
       if (thumbnailUrl) {
         return (
-          <Box pos='relative' style={fill ? { width: '100%', height: '100%' } : undefined}>
-            <MantineImage
-              src={thumbnailUrl}
-              alt={file.name || t('preview.videoThumbnailAlt')}
-              fit={fill ? 'cover' : 'contain'}
-              style={fill ? { width: '100%', height: '100%' } : { width: '100%' }}
-            />
+          <Box pos='relative'>
+            <MantineImage src={thumbnailUrl} alt={file.name || t('preview.videoThumbnailAlt')} />
             <Center pos='absolute' inset={0}>
               <IconPlayerPlay
-                size={compact ? '2rem' : '4rem'}
+                size='4rem'
                 stroke={3}
                 style={{ filter: 'drop-shadow(0 0 10px rgba(0, 0, 0, 0.9))' }}
               />
@@ -228,11 +164,6 @@ export default function DashboardFileType({
 
     const video = (
       <video
-        onClick={(e) => {
-          if (!isClickOnVideoLetterbox(e)) {
-            e.stopPropagation();
-          }
-        }}
         width={fullscreen ? undefined : '100%'}
         autoPlay
         muted={mediaAutoMuted}
@@ -248,31 +179,22 @@ export default function DashboardFileType({
       />
     );
 
-    return fullscreen ? <FullscreenSizedMedia>{video}</FullscreenSizedMedia> : video;
+    return fullscreen ? (
+      <FullscreenSizedMedia onBackdropClick={onFullscreenBackdropClick}>{video}</FullscreenSizedMedia>
+    ) : (
+      video
+    );
   }
 
   if (type === 'image') {
     if (!fileUrl) return <Loader />;
 
     if (!show) {
-      return (
-        <MantineImage
-          fit={fill ? 'cover' : 'contain'}
-          src={fileUrl}
-          alt={file.name || t('preview.imageAlt')}
-          style={fill ? { width: '100%', height: '100%' } : { width: '100%' }}
-        />
-      );
+      return <MantineImage fit='contain' mah={400} src={fileUrl} alt={file.name || t('preview.imageAlt')} />;
     }
 
     const image = (
       <MantineImage
-        onClick={(e) => {
-          if (!isClickOnImageLetterbox(e as unknown as React.MouseEvent<HTMLImageElement>)) {
-            e.stopPropagation();
-          }
-          allowZoom && setZoomOpen(true);
-        }}
         src={fileUrl}
         alt={file.name || t('preview.imageAlt')}
         fit='contain'
@@ -284,12 +206,17 @@ export default function DashboardFileType({
             ? { maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }
             : { maxWidth: '70vw', maxHeight: '70vw' }),
         }}
+        onClick={() => allowZoom && setZoomOpen(true)}
       />
     );
 
     return (
       <>
-        {fullscreen ? <FullscreenSizedMedia>{image}</FullscreenSizedMedia> : <Center>{image}</Center>}
+        {fullscreen ? (
+          <FullscreenSizedMedia onBackdropClick={onFullscreenBackdropClick}>{image}</FullscreenSizedMedia>
+        ) : (
+          <Center>{image}</Center>
+        )}
         {allowZoom && zoomOpen && (
           <FileZoomModal setOpen={setZoomOpen}>
             <MantineImage
@@ -302,12 +229,6 @@ export default function DashboardFileType({
                 cursor: 'zoom-out',
                 width: 'auto',
               }}
-              onClick={(e) => {
-                if (!isClickOnImageLetterbox(e as unknown as React.MouseEvent<HTMLImageElement>)) {
-                  e.stopPropagation();
-                }
-                setZoomOpen(false);
-              }}
             />
           </FileZoomModal>
         )}
@@ -318,14 +239,7 @@ export default function DashboardFileType({
   if (type === 'audio') {
     if (!fileUrl) return <Loader />;
     return show ? (
-      <audio
-        onClick={(e) => e.stopPropagation()}
-        autoPlay
-        muted={mediaAutoMuted}
-        controls
-        style={{ width: '100%' }}
-        src={fileUrl}
-      />
+      <audio autoPlay muted={mediaAutoMuted} controls style={{ width: '100%' }} src={fileUrl} />
     ) : (
       <Placeholder text={t('preview.clickToPlayAudio', { name: file.name })} Icon={fileIcon(file.type)} />
     );
@@ -337,10 +251,10 @@ export default function DashboardFileType({
         <Placeholder text={t('preview.clickToViewText', { name: file.name })} Icon={fileIcon(file.type)} />
       );
 
-    if (fileContent.trim() === '') {
+    if (fileContent === undefined) {
       return (
         <LoadingOverlay
-          visible={fileContent.trim() === ''}
+          visible
           loaderProps={{
             children: (
               <>
@@ -357,25 +271,24 @@ export default function DashboardFileType({
       );
     }
 
-    return show ? (
-      <FullscreenFrame fullscreen={fullscreen} onClick={(e: any) => fullscreen && e.stopPropagation()}>
+    return (
+      <FullscreenFrame fullscreen={fullscreen && !unframed} parent={scrollParent}>
         <Render
           mode={renderIn}
           language={extension}
           code={fileContent}
           noClamp={fullscreen}
+          unframed={unframed}
           scrollParent={scrollParent}
         />
       </FullscreenFrame>
-    ) : (
-      <Placeholder text={`Click to view text ${file.name}`} Icon={fileIcon(file.type)} />
     );
   }
 
   if (isAsciicast) {
     if (!fileUrl) return <Loader />;
     return show ? (
-      <FullscreenFrame fullscreen={fullscreen} onClick={(e: any) => fullscreen && e.stopPropagation()}>
+      <FullscreenFrame fullscreen={fullscreen}>
         <Asciinema src={fileUrl} />
       </FullscreenFrame>
     ) : (
@@ -390,10 +303,7 @@ export default function DashboardFileType({
     if (!fileUrl) return <Loader />;
     return show ? (
       fullscreen ? (
-        <Box
-          onClick={(e) => e.stopPropagation()}
-          style={{ height: 'calc(100vh - 7.5rem)', width: 'min(96vw, calc(100vw - 3rem))' }}
-        >
+        <Box style={{ height: 'calc(100vh - 7.5rem)', width: 'min(96vw, calc(100vw - 3rem))' }}>
           <Pdf src={fileUrl} />
         </Box>
       ) : (

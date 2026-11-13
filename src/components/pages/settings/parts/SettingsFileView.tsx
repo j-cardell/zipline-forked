@@ -1,7 +1,10 @@
-import type { User } from '@/lib/db/models/user';
+import DiscordComponentEmbedBuilder from '@/components/DiscordComponentEmbedBuilder';
+import SafeTrans from '@/components/SafeTrans';
 import { Response } from '@/lib/api/response';
-import { fetchApi } from '@/lib/fetchApi';
 import { useUserStore } from '@/lib/client/store/user';
+import type { User } from '@/lib/db/models/user';
+import { defaultDiscordComponentEmbed, discordComponentEmbedSchema } from '@/lib/discord';
+import { fetchApi } from '@/lib/fetchApi';
 import {
   Anchor,
   Button,
@@ -29,7 +32,6 @@ import {
   IconFileX,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
-import SafeTrans from '@/components/SafeTrans';
 import { mutate } from 'swr';
 import { useShallow } from 'zustand/shallow';
 
@@ -64,7 +66,7 @@ function Form({ user, setUser }: { user: User; setUser: (u: User) => void }) {
       enabled: user.view.enabled || false,
       disableTextFiles: user.view.disableTextFiles || false,
       content: user.view.content || '',
-      embed: user.view.embed || false,
+      embed: user.view.discordComponentEmbed?.enabled ? false : user.view.embed || false,
       embedMediaOnly: user.view.embedMediaOnly || false,
       embedTitle: user.view.embedTitle || '',
       embedDescription: user.view.embedDescription || '',
@@ -74,15 +76,17 @@ function Form({ user, setUser }: { user: User; setUser: (u: User) => void }) {
       showMimetype: user.view.showMimetype || false,
       showTags: user.view.showTags || false,
       showFolder: user.view.showFolder || false,
+      discordComponentEmbed: user.view.discordComponentEmbed || defaultDiscordComponentEmbed(),
     },
   });
 
   const onSubmit = async (values: typeof form.values) => {
+    const embed = !values.discordComponentEmbed.enabled && values.embed;
     const view = {
       enabled: values.enabled,
       disableTextFiles: values.disableTextFiles,
-      embed: values.embed,
-      embedMediaOnly: values.embed ? false : values.embedMediaOnly,
+      embed,
+      embedMediaOnly: !embed && values.embedMediaOnly,
       content: values.content.trim() || null,
       embedTitle: values.embedTitle.trim() || null,
       embedDescription: values.embedDescription.trim() || null,
@@ -92,7 +96,19 @@ function Form({ user, setUser }: { user: User; setUser: (u: User) => void }) {
       showMimetype: values.showMimetype,
       showTags: values.showTags,
       showFolder: values.showFolder,
+      discordComponentEmbed: values.discordComponentEmbed,
     };
+
+    const componentEmbed = discordComponentEmbedSchema.safeParse(values.discordComponentEmbed);
+    if (!componentEmbed.success) {
+      notifications.show({
+        title: t('componentBuilder.notifications.invalidLayout.title'),
+        message: componentEmbed.error.issues[0]?.message,
+        color: 'red',
+        icon: <IconFileX size='1rem' />,
+      });
+      return;
+    }
 
     const { data, error } = await fetchApi<Response['/api/user']>('/api/user', 'PATCH', {
       view,
@@ -200,7 +216,7 @@ function Form({ user, setUser }: { user: User; setUser: (u: User) => void }) {
           <Switch
             label={t('fileView.embed.label')}
             description={t('fileView.embed.description')}
-            disabled={!form.values.enabled}
+            disabled={!form.values.enabled || form.values.discordComponentEmbed.enabled}
             my='xs'
             {...form.getInputProps('embed', { type: 'checkbox' })}
             onChange={(event) => {
@@ -241,6 +257,19 @@ function Form({ user, setUser }: { user: User; setUser: (u: User) => void }) {
               {...form.getInputProps('embedColor')}
             />
           </SimpleGrid>
+
+          <Divider my='sm' />
+
+          <DiscordComponentEmbedBuilder
+            disabled={!form.values.enabled}
+            value={form.values.discordComponentEmbed}
+            onChange={(value) => {
+              form.setFieldValue('discordComponentEmbed', value);
+              if (value.enabled) {
+                form.setFieldValue('embed', false);
+              }
+            }}
+          />
 
           <Group justify='left' mt='sm'>
             <Button type='submit' leftSection={<IconDeviceFloppy size='1rem' />}>

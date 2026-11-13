@@ -10,8 +10,6 @@ import styles from './index.module.css';
 export default function DashboardFile({
   file,
   reduce,
-  compact,
-  fill,
   id,
   onOpen,
   onDelete,
@@ -20,8 +18,6 @@ export default function DashboardFile({
 }: {
   file: File;
   reduce?: boolean;
-  compact?: boolean;
-  fill?: boolean;
   id?: string;
   onOpen?: (fileId: string) => void;
   onDelete?: () => void;
@@ -59,7 +55,7 @@ export default function DashboardFile({
 
       <FileContextMenu file={file} reduce={reduce} user={id} onView={handleView} onDelete={onDelete}>
         <Card shadow='md' radius='md' p={0} className={styles.file}>
-          <DashboardFileType key={file.id} file={file} compact={compact} fill={fill} />
+          <DashboardFileType key={file.id} file={file} />
         </Card>
       </FileContextMenu>
     </div>

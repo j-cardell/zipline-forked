@@ -10,6 +10,7 @@ import { formatRootUrl } from '@/lib/url';
 import {
   ActionIcon,
   Anchor,
+  Box,
   Button,
   Center,
   Collapse,
@@ -37,7 +38,6 @@ type SsrData = {
   token?: string | null;
   metrics?: Awaited<ReturnType<typeof parserMetrics>>;
   filesRoute?: string;
-  share?: string | null;
 };
 
 export default function ViewFileId() {
@@ -46,12 +46,13 @@ export default function ViewFileId() {
   const [passwordValue, setPassword] = useState<string>('');
   const [passwordError, setPasswordError] = useState<string>('');
   const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
+  const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null);
 
   useTitle(data?.file.originalName ?? data?.file.name ?? t('file.pageTitle'));
 
   if (!data) return null;
 
-  const { file, password, code, user, host, metrics, filesRoute, token, share } = data;
+  const { file, password, code, user, host, metrics, filesRoute, token } = data;
 
   return password && !token ? (
     <Modal onClose={() => {}} opened={true} withCloseButton={false} centered title={t('password.title')}>
@@ -94,8 +95,8 @@ export default function ViewFileId() {
       </form>
     </Modal>
   ) : code ? (
-    <>
-      <Paper withBorder style={{ borderTop: 0, borderLeft: 0, borderRight: 0 }}>
+    <Box h='100dvh' style={{ display: 'flex', flexDirection: 'column' }}>
+      <Paper withBorder radius={0} style={{ borderTop: 0, borderLeft: 0, borderRight: 0, flexShrink: 0 }}>
         <Group justify='space-between' py={5} px='xs'>
           <Text c='dimmed'>{file.originalName ?? file.name}</Text>
 
@@ -108,11 +109,7 @@ export default function ViewFileId() {
               size='md'
               variant='outline'
               component={Link}
-              to={formatRootUrl('/raw', file.name!, {
-                download: 'true',
-                ...(token && { token }),
-                ...(share && { share }),
-              })}
+              to={formatRootUrl('/raw', file.name!, { download: 'true', token })}
               target='_blank'
             >
               <IconDownload size='1rem' />
@@ -121,7 +118,7 @@ export default function ViewFileId() {
         </Group>
       </Paper>
 
-      <Collapse expanded={detailsOpen}>
+      <Collapse expanded={detailsOpen} style={{ flexShrink: 0, maxHeight: '50%', overflowY: 'auto' }}>
         <Paper m='md' p='md' withBorder>
           {user?.view!.content && (
             <Typography>
@@ -150,17 +147,18 @@ export default function ViewFileId() {
         </Paper>
       </Collapse>
 
-      <Center m='sm'>
+      <Box ref={setScrollParent} pos='relative' style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <DashboardFileType
           file={file as unknown as File}
           token={token}
-          share={share}
           show
           code={code}
           fullscreen
+          unframed
+          scrollParent={scrollParent}
         />
-      </Center>
-    </>
+      </Box>
+    </Box>
   ) : (
     <>
       <Center h='100%'>
@@ -210,10 +208,7 @@ export default function ViewFileId() {
                     size='md'
                     variant='outline'
                     component={Link}
-                    to={formatRootUrl('/raw', file.name!, {
-                      ...(token && { token }),
-                      ...(share && { share }),
-                    })}
+                    to={formatRootUrl('/raw', file.name!, { token })}
                     target='_blank'
                   >
                     <IconExternalLink size='1rem' />
@@ -224,11 +219,7 @@ export default function ViewFileId() {
                     size='md'
                     variant='outline'
                     component={Link}
-                    to={formatRootUrl('/raw', file.name!, {
-                      download: 'true',
-                      ...(token && { token }),
-                      ...(share && { share }),
-                    })}
+                    to={formatRootUrl('/raw', file.name!, { download: 'true', token })}
                     target='_blank'
                   >
                     <IconDownload size='1rem' />
@@ -238,7 +229,7 @@ export default function ViewFileId() {
             </Group>
           </Group>
 
-          <DashboardFileType allowZoom file={file as unknown as File} token={token} share={share} show />
+          <DashboardFileType allowZoom file={file as unknown as File} token={token} show />
 
           {user?.view!.content && (
             <Typography>

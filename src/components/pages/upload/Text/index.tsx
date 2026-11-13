@@ -3,6 +3,7 @@ import Render from '@/components/render/Render';
 import { renderMode } from '@/components/render/renderMode';
 import { bytes } from '@/lib/bytes';
 import { uploadFiles } from '@/lib/client/upload/files';
+import { createTextFiles } from '@/lib/client/upload/text';
 import useMultiTextFiles from '@/lib/client/upload/useMultiTextFiles';
 import { useUploadOptionsStore } from '@/lib/client/store/uploadOptions';
 import {
@@ -17,7 +18,6 @@ import {
   Tabs,
   Text,
   Textarea,
-  TextInput,
   Title,
   Tooltip,
 } from '@mantine/core';
@@ -30,7 +30,7 @@ import { useShallow } from 'zustand/shallow';
 import UploadOptionsButton from '../UploadOptionsButton';
 import styles from './index.module.css';
 
-export default function UploadText() {
+export default function UploadText({ initialText }: { initialText?: string }) {
   const { t } = useTranslation('upload');
   const clipboard = useClipboard();
   const [options, ephemeral, clearEphemeral] = useUploadOptionsStore(
@@ -38,7 +38,7 @@ export default function UploadText() {
   );
 
   const [loading, setLoading] = useState(false);
-  const [files, selected, { setFile, addFile, removeFile }] = useMultiTextFiles();
+  const [files, selected, { setFile, addFile, removeFile }] = useMultiTextFiles(initialText);
 
   const codeMap = useCodeMap();
 
@@ -73,34 +73,13 @@ export default function UploadText() {
     [setFile],
   );
 
-  const handleLangChange = useCallback(
-    (index: number, lang: string) => {
-      setFile(index, 'lang', lang);
-      const current = files[index].name;
-      const base = current.includes('.') ? current.slice(0, current.lastIndexOf('.')) : current;
-      setFile(index, 'name', `${base || 'snippet'}.${lang}`);
-    },
-    [files, setFile],
-  );
-
   const aggSize = useCallback(
     () => files.reduce((acc, file) => acc + new Blob([file.text]).size, 0),
     [files],
   );
 
   const upload = async () => {
-    const fileBlobs = files.map((file) => {
-      const blob = new Blob([file.text], {
-        type: codeMap.find((meta) => meta.ext === file.lang)?.mime || 'text/plain',
-      });
-
-      const name = file.name.trim() || `snippet.${file.lang}`;
-
-      return new File([blob], name, {
-        type: blob.type,
-        lastModified: Date.now(),
-      });
-    });
+    const fileBlobs = createTextFiles(files, codeMap);
 
     await uploadFiles(fileBlobs, {
       clipboard,
@@ -168,22 +147,13 @@ export default function UploadText() {
                     {t('text.fileHeading', { number: index + 1 })}
                   </Text>
                   <Group gap='xs'>
-                    <TextInput
-                      size='xs'
-                      w={170}
-                      placeholder={t('text.filenamePlaceholder')}
-                      aria-label={t('text.filename')}
-                      value={file.name}
-                      onChange={(e) => setFile(index, 'name', e.currentTarget.value)}
-                      disabled={loading}
-                    />
                     <Select
                       size='xs'
-                      w={150}
+                      w={170}
                       aria-label={t('text.language')}
                       data={codeMap.map((meta) => ({ value: meta.ext, label: meta.name }))}
                       value={file.lang}
-                      onChange={(value) => value && handleLangChange(index, value)}
+                      onChange={(value) => value && setFile(index, 'lang', value)}
                       disabled={loading}
                       allowDeselect={false}
                       searchable
@@ -216,7 +186,6 @@ export default function UploadText() {
                   variant='unstyled'
                   className={styles.textarea}
                   resize='vertical'
-                  placeholder={t('text.placeholder')}
                 />
               </Paper>
             ))}
