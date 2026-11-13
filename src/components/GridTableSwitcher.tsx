@@ -19,7 +19,7 @@ export default function GridTableSwitcher({
           value: 'grid',
           label: (
             <Center>
-              <IconLayoutGrid />
+              <IconLayoutGrid size='1rem' />
             </Center>
           ),
         },
@@ -27,7 +27,7 @@ export default function GridTableSwitcher({
           value: 'table',
           label: (
             <Center>
-              <IconLayoutList />
+              <IconLayoutList size='1rem' />
             </Center>
           ),
         },

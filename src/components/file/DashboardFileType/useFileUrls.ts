@@ -1,5 +1,5 @@
 import { useUserStore } from '@/lib/client/store/user';
-import type { File as DbFile } from '@/lib/db/models/file';
+import type { FilePreview } from '@/lib/db/models/file';
 import { formatRootUrl } from '@/lib/url';
 import { useMemo } from 'react';
 
@@ -11,7 +11,7 @@ function appendShareOrToken(url: string, token?: string | null, share?: string |
   return qs ? `${url}?${qs}` : url;
 }
 
-export function isDbFile(file: DbFile | File): file is DbFile {
+export function isDbFile(file: FilePreview | File): file is FilePreview {
   return typeof globalThis.File !== 'undefined' ? !(file instanceof globalThis.File) : 'thumbnail' in file;
 }
 
@@ -20,7 +20,7 @@ export default function useFileUrls({
   token,
   share,
 }: {
-  file: DbFile | File;
+  file: FilePreview | File;
   token?: string | null;
   share?: string | null;
 }): {

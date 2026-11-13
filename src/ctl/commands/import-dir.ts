@@ -1,6 +1,5 @@
 import { bytes } from '@/lib/bytes';
 import { config, reloadSettings } from '@/lib/config';
-import { getDatasource } from '@/lib/datasource';
 import { db } from '@/lib/db';
 import { getOwnedFolder } from '@/lib/db/models/folder';
 import { files, users } from '@/lib/db/schema';
@@ -26,13 +25,9 @@ export async function runImportDir(
     id,
     folder,
     skipDb,
+    skipDs,
     deleteSource,
-  }: {
-    id?: string;
-    folder?: string;
-    skipDb?: boolean;
-    deleteSource?: boolean;
-  },
+  }: { id?: string; folder?: string; skipDb?: boolean; skipDs?: boolean; deleteSource?: boolean },
 ): Promise<ImportDirResult> {
   const fullPath = resolve(directory);
   if (!statSync(fullPath).isDirectory()) throw new Error('Not a directory: ' + directory);
@@ -105,6 +100,8 @@ export async function runImportDir(
   }
   console.log(`Inserted ${created.length} files into the database.`);
 
+  if (skipDs) process.exit(0);
+
   const totalSize = data.reduce((acc, file) => acc + file.size, 0);
   let imported = 0;
   let deleted = 0;
@@ -113,8 +110,9 @@ export async function runImportDir(
   if (config.datasource.type === 'local')
     await mkdir(config.datasource.local!.directory, { recursive: true });
 
-  const datasource = getDatasource(config);
-  if (!datasource) throw new Error('No datasource configured');
+  const { datasource: currentDatasource, getDatasource } = await import('@/lib/datasource');
+  const datasource = currentDatasource ?? getDatasource(config);
+  if (!datasource) return console.error('No datasource configured') as never;
 
   for (let i = 0; i !== data.length; ++i) {
     if (!data[i]) continue;
@@ -169,7 +167,7 @@ export async function runImportDir(
 
 export async function importDir(
   directory: string,
-  options: { id?: string; folder?: string; skipDb?: boolean },
+  options: { id?: string; folder?: string; skipDb?: boolean; skipDs?: boolean; deleteSource?: boolean },
 ) {
   try {
     const result = await runImportDir(directory, options);
