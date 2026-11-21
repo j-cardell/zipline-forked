@@ -3,14 +3,6 @@ import type { FilePreview } from '@/lib/db/models/file';
 import { formatRootUrl } from '@/lib/url';
 import { useMemo } from 'react';
 
-function appendShareOrToken(url: string, token?: string | null, share?: string | null): string {
-  const params = new URLSearchParams();
-  if (token) params.set('token', token);
-  if (share) params.set('share', share);
-  const qs = params.toString();
-  return qs ? `${url}?${qs}` : url;
-}
-
 export function isDbFile(file: FilePreview | File): file is FilePreview {
   return typeof globalThis.File !== 'undefined' ? !(file instanceof globalThis.File) : 'thumbnail' in file;
 }
@@ -37,16 +29,16 @@ export default function useFileUrls({
 
     const thumb = file.thumbnail?.path;
     const thumbnailUrl = thumb
-      ? appendShareOrToken(user ? `/api/user/files/${thumb}/raw` : formatRootUrl('/raw', thumb), token, share)
+      ? user
+        ? formatRootUrl(`/api/user/files/${encodeURIComponent(thumb)}`, 'raw', { token, share })
+        : formatRootUrl('/raw', thumb, { token, share })
       : null;
 
     return {
-      fileUrl: appendShareOrToken(
-        user ? `/api/user/files/${file.id}/raw` : formatRootUrl('/raw', file.name!),
-        token,
-        share,
-      ),
-      viewUrl: appendShareOrToken(formatRootUrl('/view', file.name!), token, share),
+      fileUrl: user
+        ? formatRootUrl(`/api/user/files/${file.id}`, 'raw', { token, share })
+        : formatRootUrl('/raw', file.name!, { token, share }),
+      viewUrl: formatRootUrl('/view', file.name!, { token, share }),
       thumbnailUrl,
     };
   }, [token, share, blobUrl, file, user]);
